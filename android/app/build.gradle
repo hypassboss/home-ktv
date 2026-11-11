@@ -1,0 +1,32 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The TV page URL can be overridden at build time: gradle assembleDebug -PktvUrl=https://...
+def ktvUrl = project.findProperty('ktvUrl') ?: 'https://hypassboss.github.io/home-ktv/tv.html?auto=1'
+def buildNo = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int
+
+android {
+    namespace 'tw.hypass.ktv'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'tw.hypass.ktv'
+        minSdk 24
+        targetSdk 34
+        versionCode buildNo
+        versionName "1.0.${buildNo}"
+        resValue 'string', 'ktv_url', ktvUrl
+    }
+
+    buildTypes {
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

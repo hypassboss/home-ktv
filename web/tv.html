@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>家庭 KTV · 電視</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<link rel="stylesheet" href="tv.css">
+</head>
+<body>
+<!-- video layer -->
+<div id="stage"><div id="player"></div></div>
+
+<!-- start splash: one press unlocks sound -->
+<div id="splash" class="layer">
+  <div class="splash-in">
+    <div class="logo">家庭 <b>KTV</b></div>
+    <button class="f big-btn" id="startBtn">按 OK 開始唱歌</button>
+    <canvas id="pairQr" width="240" height="240" hidden></canvas>
+    <p class="muted" id="splashNote"></p>
+  </div>
+</div>
+
+<!-- home / song menu -->
+<div id="home" class="layer" hidden>
+  <aside id="side">
+    <div class="logo sm">家庭 <b>KTV</b></div>
+    <nav id="tabs"></nav>
+    <div class="qr-box">
+      <canvas id="qr" width="150" height="150"></canvas>
+      <div>手機掃碼點歌</div>
+    </div>
+  </aside>
+  <main id="main">
+    <header id="mainHead"></header>
+    <div id="content"></div>
+  </main>
+  <div id="miniNow" hidden></div>
+</div>
+
+<!-- playing overlay (info + controls) -->
+<div id="nowBar" hidden></div>
+<div id="ctlBar" class="layer-ctl" hidden>
+  <button class="f ctl" data-c="pause">⏯ 暫停/播放</button>
+  <button class="f ctl" data-c="skip">⏭ 切歌</button>
+  <button class="f ctl" data-c="replay">🔁 重唱</button>
+  <button class="f ctl" data-c="alt">🔀 換一個版本</button>
+  <button class="f ctl" data-c="menu">🎵 點歌</button>
+</div>
+
+<!-- loading / score -->
+<div id="busy" hidden><div class="spin"></div><div id="busyText">準備中…</div></div>
+<div id="score" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://www.youtube.com/iframe_api"></script>
+<script type="module" src="tv.js"></script>
+</body>
+</html>

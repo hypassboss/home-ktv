@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0a17">
+<title>家庭 KTV · 點歌</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<link rel="stylesheet" href="m.css">
+</head>
+<body>
+<header id="top">
+  <div class="now" id="now"><div class="now-empty">還沒有歌在播，點一首吧 🎤</div></div>
+  <div class="ctl-row">
+    <button class="cbtn" data-c="pause" aria-label="暫停或播放">⏯</button>
+    <button class="cbtn" data-c="skip" aria-label="切歌">⏭ 切歌</button>
+    <button class="cbtn" data-c="replay" aria-label="重唱">🔁 重唱</button>
+    <button class="cbtn" data-c="alt" aria-label="換版本">🔀 換版</button>
+    <button class="cbtn mic" id="micBtn" aria-pressed="false">🎙 評分</button>
+  </div>
+</header>
+
+<main id="view"></main>
+
+<nav id="tabbar">
+  <button data-v="home" class="on"><span>🏠</span>排行</button>
+  <button data-v="search"><span>🔎</span>搜尋</button>
+  <button data-v="queue"><span>📋</span>排隊<b id="qBadge" hidden></b></button>
+  <button data-v="fav"><span>★</span>最愛</button>
+  <button data-v="sung"><span>🕘</span>唱過</button>
+</nav>
+
+<div id="who" class="sheet" hidden>
+  <div class="sheet-in">
+    <h2>你是誰？</h2>
+    <p class="muted">選自己的名字，點的歌、最愛和分數會記在你名下。</p>
+    <div id="whoList"></div>
+    <form id="whoForm"><input id="whoName" placeholder="新增名字，例如：Stanley" maxlength="12" autocomplete="off"><button>新增</button></form>
+  </div>
+</div>
+<script type="module" src="m.js"></script>
+</body>
+</html>
