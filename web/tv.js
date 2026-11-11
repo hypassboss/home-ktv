@@ -372,6 +372,9 @@ on("ctl", (p) => {
   if (p.cmd === "replay") replay();
   if (p.cmd === "alt") altVersion();
 });
+// touch screens (phone/tablet used as the player): tap the video for controls, tap the mini bar to return
+$("#stage").onclick = () => { if (view === "playing") show("ctl"); };
+$("#miniNow").onclick = () => { if (current) show("playing"); };
 on("queue", () => refreshQueue());
 on("hello", () => broadcastState());
 

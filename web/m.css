@@ -17,6 +17,7 @@ button,input{font-family:inherit;color:inherit;font-size:inherit}
 .now .lab{font-size:12px;color:var(--cyan)}
 .now .t{font-size:18px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .now-empty{color:var(--muted)}
+#playHere{display:block;margin-top:8px;padding:10px;border-radius:12px;text-align:center;font-weight:700;text-decoration:none;color:#fff;background:linear-gradient(135deg,var(--pink),#9d3dff)}
 .ctl-row{display:flex;gap:6px;margin-top:8px}
 .cbtn{flex:1;border:1px solid var(--line);background:var(--panel2);border-radius:12px;padding:9px 4px;font-weight:700;font-size:14px}
 .cbtn:active{transform:scale(.96)}

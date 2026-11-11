@@ -18,6 +18,11 @@ button{font-family:inherit;color:inherit}
 /* video */
 #stage{position:fixed;inset:0;background:#000}
 #stage iframe{width:100%;height:100%;border:0;pointer-events:none}
+#miniNow{cursor:pointer}
+@media (orientation:portrait){html,body{font-size:2.2vw}.grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}#home{grid-template-columns:1fr!important}#side{display:none!important}
+  .card .t{font-size:3.4vw}.card .a,.card .who{font-size:2.6vw}.bd{font-size:2.2vw}.row-title{font-size:3.6vw}.row-title small{font-size:2.4vw}#mainHead h2{font-size:4.4vw}.chip{font-size:2.8vw;padding:1.4vw 3vw}
+  .big-btn{font-size:5vw;padding:3vw 8vw}.logo{font-size:10vw}.ctl{font-size:3vw;padding:2.4vw 3vw}.layer-ctl{flex-wrap:wrap}#nowBar{max-width:92vw}#nowBar .t{font-size:4.4vw}#nowBar .who,#nowBar .nx{font-size:2.8vw}
+  #miniNow{font-size:2.8vw;max-width:80vw}#toast{font-size:3.2vw}#busy{font-size:3.6vw}#score .s-msg{font-size:6vw}#score .s-who,#score .s-sub{font-size:3.4vw}}
 
 /* focus (D-pad) */
 .f{outline:none;transition:transform .12s,box-shadow .12s}
