@@ -96,14 +96,24 @@ async function embeddable(id: string) {
 const KTV_RE = /ktv|伴唱|卡拉|karaoke|導唱|导唱|kala|伴奏版|消音/i;
 const BAD_RE = /live|演唱會|演唱会|cover|翻唱|reaction|教學|教学|\bdj\b|remix|shorts|抖音|tiktok|1小時|1小时|一小時|1 hour|循環|循环|鋼琴|钢琴|吉他|piano|guitar|舞蹈|dance|8d|慢速|加速|sped up|slowed|片段/i;
 const LABEL_RE = /華納|华纳|環球|环球|sony|滾石|滚石|相信音樂|相信音乐|華研|华研|金牌大風|台灣索尼|warner|universal|avex|種子音樂|種子|豐華|丰华|ktv|卡拉/i;
+// The video must really be this song: compare in Traditional Chinese on both sides.
+function titleMatch(vt: string, ch: string, title: string, artist: string) {
+  const nv = norm(s2t(vt)), nt = norm(s2t(title));
+  if (!nt) return false;
+  const a = norm(s2t(mainArtist(artist)));
+  const hasArtist = !a || nv.includes(a) || norm(s2t(ch)).includes(a);
+  if (nv.includes(nt)) return [...nt].length > 2 || hasArtist; // very short titles also need the artist
+  const runs = (s2t(title).match(/\p{Script=Han}{2,}/gu) ?? []).map(norm);
+  return runs.length > 1 && hasArtist && runs.some((r) => nv.includes(r)); // "中文名English - 副標" style titles
+}
 function scoreVid(v: Vid, title: string, artist: string) {
-  let s = 0;
-  const nt = norm(v.t);
+  if (!titleMatch(v.t, v.ch, title, artist)) return { s: -99, ktv: false };
+  let s = 4;
+  const nt = norm(s2t(v.t));
   const isKtv = KTV_RE.test(v.t) || /ktv|卡拉/i.test(v.ch);
   if (isKtv) s += 6;
-  if (nt.includes(norm(title))) s += 4; else s -= 3;
-  const a = norm(mainArtist(artist));
-  if (a && (nt.includes(a) || norm(v.ch).includes(a))) s += 2;
+  const a = norm(s2t(mainArtist(artist)));
+  if (a && (nt.includes(a) || norm(s2t(v.ch)).includes(a))) s += 2;
   if (LABEL_RE.test(v.ch)) s += 2;
   if (BAD_RE.test(v.t)) s -= 6;
   if (/[ăđơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i.test(v.t)) s -= 4; // Vietnamese karaoke versions
@@ -130,8 +140,10 @@ async function matchSong(title: string, artist: string) {
   return out;
 }
 async function resolveSong(song: any) {
-  const cands = await matchSong(song.title, song.artist);
-  const upd = { yt: cands, yt_status: cands.length ? "ok" : "none", yt_checked_at: new Date().toISOString() };
+  // versions that failed to play on the TV stay recorded so they are never picked again
+  const bad = (song.yt ?? []).filter((c: any) => c.bad);
+  const cands = (await matchSong(song.title, song.artist)).filter((c) => !bad.some((b: any) => b.id === c.id));
+  const upd = { yt: [...cands, ...bad], yt_status: cands.length ? "ok" : "none", yt_checked_at: new Date().toISOString() };
   await SB.from("ktv_songs").update(upd).eq("id", song.id);
   return { ...song, ...upd };
 }
@@ -281,6 +293,20 @@ Deno.serve(async (req) => {
         await SB.from("ktv_songs").update({ yt, yt_status: anyGood ? "ok" : "pending" }).eq("id", song.id);
         if (!anyGood) return json({ song: await resolveSong({ ...song, yt }) });
         return json({ song: { ...song, yt } });
+      }
+      case "recheck": {
+        // re-validate stored matches with the current title rule; no YouTube requests
+        const { data: all } = await SB.from("ktv_songs").select("id,title,artist,yt").eq("yt_status", "ok").limit(5000);
+        let dropped = 0, requeued = 0;
+        for (const s of all ?? []) {
+          const keep = (s.yt ?? []).filter((c: any) => c.bad || titleMatch(c.t ?? "", c.ch ?? "", s.title, s.artist));
+          if (keep.length === (s.yt ?? []).length) continue;
+          dropped += (s.yt ?? []).length - keep.length;
+          const good = keep.some((c: any) => !c.bad);
+          if (!good) requeued++;
+          await SB.from("ktv_songs").update({ yt: keep, yt_status: good ? "ok" : "pending", yt_checked_at: good ? new Date().toISOString() : null }).eq("id", s.id);
+        }
+        return json({ checked: (all ?? []).length, dropped, requeued });
       }
       case "yt_search": {
         const vids = (await ytSearch(String(body.q ?? "") + " KTV")).slice(0, 15);

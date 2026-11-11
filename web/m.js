@@ -141,6 +141,7 @@ async function doSearch(q, keepVids) {
   if (!q) { box.innerHTML = `<div class="empty">打字或按 🎤 直接說歌名</div>`; return; }
   if (!keepVids) lastVids = null;
   const songs = await searchSongs(q);
+  if (q !== lastQ || !$("#sr")) return; // a newer search started while this one was loading
   box.innerHTML = (songs.length ? `<div class="sub">歌庫裡找到 ${songs.length} 首</div><div class="list">${songs.map((s) => row(s)).join("")}</div>`
       : `<div class="empty">歌庫裡沒有「${esc(q)}」</div>`) +
     `<button class="ytbtn" id="ytb">到 YouTube 找「${esc(q)}」的 KTV 版</button><div id="yr"></div>`;

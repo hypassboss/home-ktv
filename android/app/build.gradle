@@ -19,9 +19,20 @@ android {
         resValue 'string', 'ktv_url', ktvUrl
     }
 
+    // Fixed key kept in the repo so every build is signed the same way and updates install over the old app.
+    signingConfigs {
+        debug {
+            storeFile file('ktv.keystore')
+            storePassword 'homektv'
+            keyAlias 'ktv'
+            keyPassword 'homektv'
+        }
+    }
+
     buildTypes {
         debug {
             minifyEnabled false
+            signingConfig signingConfigs.debug
         }
     }
 

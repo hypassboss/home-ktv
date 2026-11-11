@@ -66,6 +66,7 @@ function show(v) {
   scope = v === "home" ? $("#home") : v === "ctl" ? $("#ctlBar") : v === "splash" ? $("#splash") : document;
   if (v === "home") { renderMiniNow(); setTimeout(() => focusFirst($("#content")) || null, 0); }
   if (v === "ctl") setTimeout(() => focusFirst($("#ctlBar")), 0);
+  updateNowBar();
 }
 function onArrow(dir) {
   if (view === "playing") { show("ctl"); return; }
@@ -196,8 +197,9 @@ async function onError(e) {
   // 100 removed, 101/150 embedding blocked, 2/5 bad id → mark and try another version
   if (!current || !curVideo) return;
   const song = current.song;
+  current.errs = (current.errs || 0) + 1;
   busy(true, "這個版本不能播，換一個…");
-  try {
+  if (current.errs <= 3) try {
     const r = await api("mark_bad", { song_id: song.id, video_id: curVideo.id });
     current.song = r.song;
     const v = bestVideo(r.song);
@@ -289,9 +291,10 @@ async function altVersion() {
 async function finishCurrent(status) {
   if (!current) return;
   const item = current;
+  advancing = true; // block the 8-second poll from restarting this song while its status is being saved
   current = null; curVideo = null;
   try { yt?.stopVideo(); } catch { /* */ }
-  await sb.from("ktv_queue").update({ status }).eq("id", item.id);
+  try { await sb.from("ktv_queue").update({ status }).eq("id", item.id); } finally { advancing = false; }
   emit("queue");
   updateNowBar();
   if (view === "ctl" || view === "playing") show("home");
