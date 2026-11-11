@@ -12,3 +12,5 @@
 ## 排程
 - 每 3 分鐘：替還沒配對的歌找 YouTube KTV 版
 - 每週一 05:00（台灣時間）：更新 11 個排行榜
+
+網站：https://hypassboss.github.io/home-ktv/
