@@ -80,6 +80,25 @@ export async function searchSongs(q) {
   const { data } = await sb.rpc("ktv_search", { p_q: q, p_limit: 40 });
   return data || [];
 }
+const SPLIT = /\s*[、,，&\/／]\s*/;
+export async function artistsList() {
+  const { data } = await sb.from("ktv_songs").select("artist,gender").neq("artist", "").limit(5000);
+  const m = new Map();
+  for (const r of data || []) {
+    const names = r.artist.split(SPLIT).filter(Boolean);
+    for (const name of names) {
+      const a = m.get(name) || { name, n: 0, gender: null };
+      a.n++;
+      if (names.length === 1 && r.gender && r.gender !== "duet") a.gender = r.gender;
+      m.set(name, a);
+    }
+  }
+  return [...m.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, "zh-Hant"));
+}
+export async function songsByArtist(name) {
+  const { data } = await sb.from("ktv_songs").select(SONG_COLS).ilike("artist", "%" + name + "%").order("title").limit(300);
+  return data || [];
+}
 export async function members() {
   const { data } = await sb.from("ktv_members").select("*").order("created_at");
   return data || [];
@@ -104,10 +123,15 @@ export async function queueNow() {
   const rows = data || [];
   return { playing: rows.find((r) => r.status === "playing") || null, queued: rows.filter((r) => r.status === "queued") };
 }
-export async function enqueue(songId, memberId) {
+export async function enqueue(songId, memberId, front = false) {
   const { data: dup } = await sb.from("ktv_queue").select("id").eq("song_id", songId).in("status", ["queued", "playing"]).limit(1);
   if (dup && dup.length) return false; // already waiting or playing
-  const { error } = await sb.from("ktv_queue").insert({ song_id: songId, member_id: memberId || null });
+  const row = { song_id: songId, member_id: memberId || null };
+  if (front) { // 插播: goes ahead of everything that is waiting
+    const { data: first } = await sb.from("ktv_queue").select("priority").eq("status", "queued").order("priority").limit(1);
+    if (first && first.length) row.priority = first[0].priority - 1;
+  }
+  const { error } = await sb.from("ktv_queue").insert(row);
   if (error) throw error;
   emit("queue");
   // warm up the YouTube match in the background

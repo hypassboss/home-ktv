@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, favoritesOf, sungSongs, queueNow, enqueue,
   badges, esc, bestVideo, kindOf, toast, store,
-} from "./shared.js?v=1794453507";
+} from "./shared.js?v=1794453911";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -404,6 +404,7 @@ on("ctl", (p) => {
   if (p.cmd === "replay") replay();
   if (p.cmd === "alt") altVersion();
   if (p.cmd === "guide") toggleGuide();
+  if (p.cmd === "fx") applause();
 });
 // touch screens (phone/tablet used as the player): tap the video for controls, tap the mini bar to return
 $("#stage").onclick = () => { if (view === "playing") show("ctl"); };
