@@ -187,3 +187,31 @@ export function toast(msg, ms = 2200) {
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove("show"), ms);
 }
+
+// ---- phone microphone -> TV speakers (WebRTC audio) ----
+const RTC = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+function gathered(pc) {
+  return new Promise((res) => {
+    if (pc.iceGatheringState === "complete") return res();
+    const t = setTimeout(res, 2500);
+    pc.addEventListener("icegatheringstatechange", () => { if (pc.iceGatheringState === "complete") { clearTimeout(t); res(); } });
+  });
+}
+export async function micOffer(stream) {
+  const pc = new RTCPeerConnection(RTC);
+  stream.getAudioTracks().forEach((t) => pc.addTrack(t, stream));
+  await pc.setLocalDescription(await pc.createOffer());
+  await gathered(pc);
+  return { pc, sdp: pc.localDescription.sdp };
+}
+export async function micAnswer(sdp, onStream) {
+  const pc = new RTCPeerConnection(RTC);
+  pc.ontrack = (e) => {
+    try { e.receiver.playoutDelayHint = 0; e.receiver.jitterBufferTarget = 0; } catch { /* older browsers */ }
+    onStream(e.streams[0] || new MediaStream([e.track]));
+  };
+  await pc.setRemoteDescription({ type: "offer", sdp });
+  await pc.setLocalDescription(await pc.createAnswer());
+  await gathered(pc);
+  return { pc, sdp: pc.localDescription.sdp };
+}

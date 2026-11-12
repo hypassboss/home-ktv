@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, searchSongs, members, favoritesOf, sungSongs,
-  queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf, artistsList, songsByArtist,
-} from "./shared.js?v=1794453911";
+  queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf, artistsList, songsByArtist, micOffer,
+} from "./shared.js?v=1794459913";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -396,6 +396,44 @@ $("#micBtn").onclick = async () => {
   } catch { toast("沒有麥克風權限，請在瀏覽器允許麥克風"); }
 };
 
+// ================= phone as a wireless microphone (voice plays on the TV) =================
+const liveMic = (() => {
+  let pc = null, stream = null, id = null, lock = null, waitT = null;
+  const btn = $("#micLive");
+  function stop(quiet) {
+    clearTimeout(waitT);
+    if (id) emit("mic-stop", { id });
+    try { pc?.close(); } catch { /* */ }
+    stream?.getTracks().forEach((t) => t.stop());
+    try { lock?.release(); } catch { /* */ }
+    pc = null; stream = null; id = null; lock = null;
+    btn.setAttribute("aria-pressed", "false"); btn.textContent = "🎤 手機當麥克風";
+    if (!quiet) toast("麥克風已關閉");
+  }
+  async function start() {
+    if (mode === "local") { toast("影片在這支手機播的時候不能當麥克風。先切到「遙控電視」", 3500); return; }
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: false, channelCount: 1 } }); }
+    catch { toast("沒有麥克風權限，請在瀏覽器允許麥克風"); return; }
+    btn.setAttribute("aria-pressed", "true"); btn.textContent = "🎤 連線中…";
+    try {
+      id = Math.random().toString(36).slice(2, 10);
+      const o = await micOffer(stream);
+      pc = o.pc;
+      pc.addEventListener("connectionstatechange", () => {
+        if (!pc) return;
+        if (pc.connectionState === "connected") { clearTimeout(waitT); btn.textContent = "🎤 麥克風開啟中（按一下關閉）"; toast("麥克風已連上電視 🎤"); }
+        if (["failed", "disconnected"].includes(pc.connectionState)) { toast("麥克風連線中斷"); stop(true); }
+      });
+      emit("mic-offer", { id, sdp: o.sdp, name: me?.name || "" });
+      waitT = setTimeout(() => { if (pc && pc.connectionState !== "connected") { toast("電視沒有回應：請確認電視的 KTV 開著，而且和手機在同一個 Wi-Fi", 4500); stop(true); } }, 10000);
+      try { lock = await navigator.wakeLock?.request("screen"); } catch { /* */ }
+    } catch { toast("麥克風連線失敗"); stop(true); }
+  }
+  on("mic-answer", async (p) => { if (pc && p.id === id) { try { await pc.setRemoteDescription({ type: "answer", sdp: p.sdp }); } catch { /* */ } } });
+  btn.onclick = () => (pc || stream ? stop() : start());
+  return { stop };
+})();
+
 // ================= play on this phone =================
 // "local": this phone shows the KTV video.  "remote": this phone controls the TV.
 let mode = "remote";
@@ -546,7 +584,7 @@ function setMode(m, save) {
   $$("#modeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.m === m));
   $("#pbox").hidden = m !== "local";
   $("#fsBtn").hidden = m !== "local";
-  if (m === "local") { P.loadApi(); refreshNow(); } else P.stop();
+  if (m === "local") { liveMic.stop(true); P.loadApi(); refreshNow(); } else P.stop();
 }
 $$("#modeSeg button").forEach((b) => (b.onclick = () => setMode(b.dataset.m, true)));
 // First visit: if a TV answers, be its remote; otherwise play on this phone.

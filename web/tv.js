@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, favoritesOf, sungSongs, queueNow, enqueue,
-  badges, esc, bestVideo, kindOf, toast, store,
-} from "./shared.js?v=1794453911";
+  badges, esc, bestVideo, kindOf, toast, store, micAnswer,
+} from "./shared.js?v=1794459913";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -411,6 +411,38 @@ $("#stage").onclick = () => { if (view === "playing") show("ctl"); };
 $("#miniNow").onclick = () => { if (current) show("playing"); };
 on("queue", () => refreshQueue());
 on("hello", () => broadcastState());
+
+// ---- phones used as wireless microphones ----
+const micPcs = new Map(), micNodes = new Map();
+function closeMic(id) {
+  const n = micNodes.get(id);
+  if (n) { try { n.src.disconnect(); n.dry.disconnect(); n.wet.disconnect(); n.delay.disconnect(); n.fb.disconnect(); n.el.srcObject = null; } catch { /* */ } micNodes.delete(id); }
+  const pc = micPcs.get(id);
+  if (pc) { try { pc.close(); } catch { /* */ } micPcs.delete(id); }
+}
+function playMic(id, stream) {
+  try {
+    actx ||= new (window.AudioContext || window.webkitAudioContext)({ latencyHint: "interactive" });
+    actx.resume();
+    const el = new Audio(); el.muted = true; el.srcObject = stream; el.play().catch(() => {}); // keeps the remote stream flowing in Chromium
+    const src = actx.createMediaStreamSource(stream), dry = actx.createGain(), delay = actx.createDelay(1), fb = actx.createGain(), wet = actx.createGain();
+    dry.gain.value = 1; delay.delayTime.value = 0.14; fb.gain.value = 0.3; wet.gain.value = 0.32;
+    src.connect(dry).connect(actx.destination);
+    src.connect(delay); delay.connect(fb).connect(delay); delay.connect(wet).connect(actx.destination);
+    micNodes.set(id, { el, src, dry, delay, fb, wet });
+  } catch { toast("麥克風聲音播放失敗"); }
+}
+on("mic-offer", async (p) => {
+  try {
+    closeMic(p.id);
+    const a = await micAnswer(p.sdp, (stream) => playMic(p.id, stream));
+    micPcs.set(p.id, a.pc);
+    a.pc.addEventListener("connectionstatechange", () => { if (["failed", "closed", "disconnected"].includes(a.pc.connectionState)) closeMic(p.id); });
+    emit("mic-answer", { id: p.id, sdp: a.sdp });
+    toast(`🎤 ${p.name || "手機"} 的麥克風已連線`);
+  } catch { toast("麥克風連線失敗"); }
+});
+on("mic-stop", (p) => closeMic(p.id));
 
 // ================= boot =================
 // First run on a new TV: show a pairing QR; a phone that is already set up confirms it.
