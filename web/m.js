@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, searchSongs, members, favoritesOf, sungSongs,
-  queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store,
-} from "./shared.js?v=1794447290";
+  queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf,
+} from "./shared.js?v=1794453507";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -109,10 +109,10 @@ async function renderHome() {
   const sel = chartSel[region] || list[0]?.id;
   chartSel[region] = sel;
   V.innerHTML = `<div class="seg">${[["tw", "台灣排行"], ["cn", "大陸排行"], ["classic", "經典回憶"]].map(([k, n]) => `<button data-r="${k}" class="${k === region ? "on" : ""}">${n}</button>`).join("")}</div>
-    <div class="chips">${list.map((c) => `<button class="chip ${c.id === sel ? "on" : ""}" data-c="${c.id}">${esc(c.name)}</button>`).join("")}</div>
+    <div class="chips">${list.map((c) => `<button class="chip ${c.id === sel ? "on" : ""}" data-chart="${c.id}">${esc(c.name)}</button>`).join("")}</div>
     <div id="chartBody"><div class="empty">載入中…</div></div>`;
-  $$("[data-r]").forEach((b) => (b.onclick = () => { region = b.dataset.r; store("ktv_region", region); renderHome(); }));
-  $$("[data-c]").forEach((b) => (b.onclick = () => { chartSel[region] = b.dataset.c; renderHome(); }));
+  $$("[data-r]", V).forEach((b) => (b.onclick = () => { region = b.dataset.r; store("ktv_region", region); renderHome(); }));
+  $$("[data-chart]", V).forEach((b) => (b.onclick = () => { chartSel[region] = b.dataset.chart; renderHome(); }));
   if (!sel) { $("#chartBody").innerHTML = `<div class="empty">排行榜還沒有資料</div>`; return; }
   const songs = await chartSongs(sel, 60);
   const c = list.find((x) => x.id === sel);
@@ -242,6 +242,7 @@ let nowState = null;
 async function refreshNow() {
   const q = await queueNow().catch(() => null);
   if (!q) return;
+  P.tick(q);
   const b = $("#qBadge");
   b.hidden = !q.queued.length; b.textContent = q.queued.length;
   const p = q.playing;
@@ -250,10 +251,16 @@ async function refreshNow() {
     : `<div class="now-empty">還沒有歌在播，點一首吧 🎤</div>`;
   if (view === "queue") renderQueue();
 }
-$$(".cbtn[data-c]").forEach((b) => (b.onclick = () => { emit("ctl", { cmd: b.dataset.c }); toast({ pause: "暫停 / 播放", skip: "切歌", replay: "重唱", alt: "換一個版本", guide: "導唱 開 / 關" }[b.dataset.c]); }));
+const CTL_NAME = { pause: "暫停 / 播放", skip: "切歌", replay: "重唱", alt: "換一個版本", guide: "導唱 開 / 關" };
+$$(".cbtn[data-c]").forEach((b) => (b.onclick = () => {
+  const c = b.dataset.c;
+  if (mode === "local") P.cmd(c); else { emit("ctl", { cmd: c }); toast(CTL_NAME[c]); }
+}));
 on("queue", refreshNow);
-on("state", (s) => { nowState = s; scorer.onState(s); refreshNow(); });
-on("ended", (p) => scorer.onEnded(p));
+on("state", (s) => { if (mode === "local") return; nowState = s; scorer.onState(s); refreshNow(); });
+on("ended", (p) => { if (mode !== "local") scorer.onEnded(p); });
+on("ctl", (p) => { if (mode === "local") P.cmd(p.cmd); });
+on("hello", () => { if (mode === "local") P.sync(); });
 
 // ================= scoring mic (fun score) =================
 // Listens while a song plays: how much of the song has a singing voice, and how steady the pitch is.
@@ -309,6 +316,7 @@ const scorer = (() => {
     get on() { return !!stream; },
     async toggle() { if (stream) stop(); else await start(); return !!stream; },
     onState(s) { if (!stream) return; if (s.qid !== st.qid) reset(s.qid); st.paused = !!s.paused; },
+    take() { if (!stream) return null; const s = compute(); reset(null); return s; },
     onEnded(p) {
       if (!stream) return;
       const score = compute();
@@ -324,6 +332,169 @@ $("#micBtn").onclick = async () => {
     toast(onoff ? "評分麥克風已開：把手機放在唱歌的人附近" : "評分麥克風已關", 2600);
   } catch { toast("沒有麥克風權限，請在瀏覽器允許麥克風"); }
 };
+
+// ================= play on this phone =================
+// "local": this phone shows the KTV video.  "remote": this phone controls the TV.
+let mode = "remote";
+function praise(s) { return s >= 95 ? "歌神降臨！" : s >= 90 ? "太好聽了！" : s >= 85 ? "唱得真好！" : s >= 78 ? "很有感覺！" : "勇氣可嘉！"; }
+const P = (() => {
+  let yt = null, current = null, curVideo = null, paused = false, started = false, ending = false, advancing = false, guideOn = false, nudgeT = null, fsT = null;
+  const guideCache = {};
+  const box = $("#pbox"), pmsg = $("#pmsg"), fsbar = $("#fsbar");
+  function msg(html, cls = "") { pmsg.hidden = !html; pmsg.className = cls; pmsg.innerHTML = html || ""; }
+  function loadApi() {
+    if (document.getElementById("ytapi")) return;
+    const s = document.createElement("script"); s.id = "ytapi"; s.src = "https://www.youtube.com/iframe_api"; document.head.appendChild(s);
+  }
+  function load(videoId, start = 0) {
+    return new Promise((resolve, reject) => {
+      const t0 = Date.now();
+      const wait = () => (window.YT && YT.Player ? go() : Date.now() - t0 > 15000 ? reject(new Error("yt_api")) : setTimeout(wait, 200));
+      const go = () => {
+        if (yt) { yt.loadVideoById({ videoId, startSeconds: start }); resolve(); return; }
+        yt = new YT.Player("player", {
+          videoId,
+          playerVars: { start: Math.floor(start), autoplay: 1, controls: 0, rel: 0, playsinline: 1, iv_load_policy: 3, fs: 0, disablekb: 1 },
+          events: { onReady: (e) => { e.target.playVideo(); resolve(); }, onStateChange, onError },
+        });
+      };
+      wait();
+    });
+  }
+  function onStateChange(e) {
+    if (e.data === 0) ended();
+    if (e.data === 1) { paused = false; started = true; clearTimeout(nudgeT); if (!ending) msg(""); sync(); }
+    if (e.data === 2) { paused = true; sync(); }
+  }
+  function sync() {
+    const s = current ? { qid: current.id, title: current.song.title, paused } : { qid: null };
+    scorer.onState(s); emit("state", s);
+  }
+  async function onError() {
+    if (!current || !curVideo) return;
+    guideOn = false; current.errs = (current.errs || 0) + 1;
+    msg("這個版本不能播，換一個…");
+    if (current.errs <= 3) try {
+      const r = await api("mark_bad", { song_id: current.song.id, video_id: curVideo.id });
+      current.song = r.song;
+      const v = bestVideo(r.song);
+      if (v) { curVideo = v; await load(v.id); return; }
+    } catch { /* fall through */ }
+    toast("找不到可以播放的版本，跳下一首"); finish("skipped");
+  }
+  async function start(item) {
+    current = item; ending = false; started = false;
+    msg(`準備「${esc(item.song.title)}」…`);
+    let song = item.song;
+    if (song.yt_status !== "ok" || !bestVideo(song)) { try { song = (await api("resolve", { song_id: song.id })).song; } catch { /* */ } }
+    if (current !== item) return;
+    current.song = song;
+    const v = bestVideo(song);
+    if (!v) { toast(`找不到「${song.title}」的影片，跳下一首`); return finish("skipped"); }
+    curVideo = v; guideOn = kindOf(v) === "g";
+    try { await load(v.id); } catch { msg("YouTube 載入失敗，請檢查網路"); return; }
+    clearTimeout(nudgeT);
+    nudgeT = setTimeout(() => { if (current === item && !started) msg("▶ 點一下開始播放", "tap"); }, 4000);
+    sync(); refreshNow();
+  }
+  async function finish(status) {
+    if (!current) return;
+    const item = current;
+    advancing = true; current = null; curVideo = null; clearTimeout(nudgeT);
+    try { yt?.stopVideo(); } catch { /* */ }
+    try { await sb.from("ktv_queue").update({ status }).eq("id", item.id); } finally { advancing = false; }
+    msg(""); emit("queue"); sync(); refreshNow();
+  }
+  async function ended() {
+    if (ending || !current) return;
+    ending = true;
+    const item = current, score = scorer.take();
+    await sb.from("ktv_history").insert({ member_id: item.member_id, song_id: item.song.id, score });
+    msg(score != null ? `<b>${score}</b><span>${praise(score)}</span>` : `<span>👏 唱得好！</span><small>想要分數，先按「評分」再唱</small>`, "score");
+    await new Promise((r) => setTimeout(r, 4000));
+    await finish("done");
+  }
+  async function tick(q) {
+    if (mode !== "local" || current || advancing) return;
+    if (q.playing) {
+      const age = Date.now() - new Date(q.playing.started_at || q.playing.created_at).getTime();
+      if (age > 20 * 60e3) { await sb.from("ktv_queue").update({ status: "skipped" }).eq("id", q.playing.id); return refreshNow(); }
+      start(q.playing);
+    } else if (q.queued.length) {
+      advancing = true;
+      const next = q.queued[0];
+      try { await sb.from("ktv_queue").update({ status: "playing", started_at: new Date().toISOString() }).eq("id", next.id); } finally { advancing = false; }
+      emit("queue"); start({ ...next, status: "playing" });
+    }
+  }
+  async function guide() {
+    const song = current.song, c = (song.yt || []).filter((x) => !x.bad);
+    const t = Math.max(0, (yt.getCurrentTime ? yt.getCurrentTime() : 0) || 0);
+    if (guideOn) {
+      const b = c.find((x) => kindOf(x) === "b");
+      if (!b) { toast("這首目前只有原唱版，沒有伴唱版"); return; }
+      guideOn = false; curVideo = b; await load(b.id, t); toast("導唱關閉（伴唱版）"); return;
+    }
+    let g = c.find((x) => kindOf(x) === "g") || guideCache[song.id];
+    if (!g) {
+      toast("尋找原唱版本…");
+      try {
+        const r = await api("yt_search", { q: `${song.title} ${song.artist || ""} 原唱 歌詞` });
+        const ok = (v) => kindOf({ ...v, ktv: false }) === "g" && (!v.sec || (v.sec > 100 && v.sec < 540));
+        g = r.videos.find((v) => ok(v) && v.t.includes(song.title)) || null;
+        if (g) guideCache[song.id] = g;
+      } catch { /* */ }
+    }
+    if (!g) { toast("找不到這首的原唱版本"); return; }
+    guideOn = true; curVideo = g; await load(g.id, t); toast("導唱開啟（原唱版）");
+  }
+  async function alt() {
+    const c = (current.song.yt || []).filter((x) => !x.bad);
+    const i = c.findIndex((x) => x.id === curVideo?.id), nx = c[(i + 1) % c.length];
+    if (nx && nx.id !== curVideo?.id) { curVideo = nx; guideOn = kindOf(nx) === "g"; await load(nx.id); toast("已換成另一個版本"); }
+    else toast("目前只有這個版本");
+  }
+  function fullscreen() {
+    if (document.fullscreenElement) { document.exitFullscreen(); return; }
+    if (!box.requestFullscreen) { toast("這個瀏覽器不支援全螢幕"); return; }
+    box.requestFullscreen().then(() => { try { screen.orientation.lock("landscape").catch(() => {}); } catch { /* */ } }).catch(() => toast("無法進入全螢幕"));
+  }
+  document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement) { fsbar.classList.remove("show"); try { screen.orientation.unlock(); } catch { /* */ } } });
+  $("#ptap").onclick = () => {
+    if (current && yt && (!started || paused)) { yt.playVideo(); return; }
+    if (document.fullscreenElement) { fsbar.classList.toggle("show"); clearTimeout(fsT); fsT = setTimeout(() => fsbar.classList.remove("show"), 4000); }
+  };
+  function cmd(c) {
+    if (c === "fs") return fullscreen();
+    if (!current || !yt) { toast("還沒有歌在播，先點一首"); return; }
+    if (c === "pause") { if (paused || !started) yt.playVideo(); else yt.pauseVideo(); }
+    if (c === "skip") finish("skipped");
+    if (c === "replay") { yt.seekTo(0, true); yt.playVideo(); }
+    if (c === "guide") guide().catch((e) => { console.error("guide", e); toast("導唱切換失敗"); });
+    if (c === "alt") alt().catch((e) => { console.error("alt", e); toast("換版本失敗"); });
+  }
+  function stop() { try { yt?.stopVideo(); } catch { /* */ } current = null; curVideo = null; clearTimeout(nudgeT); msg(""); }
+  return { tick, cmd, sync, stop, loadApi };
+})();
+function setMode(m, save) {
+  mode = m;
+  if (save) store("ktv_mode", m);
+  $$("#modeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.m === m));
+  $("#pbox").hidden = m !== "local";
+  $("#fsBtn").hidden = m !== "local";
+  if (m === "local") { P.loadApi(); refreshNow(); } else P.stop();
+}
+$$("#modeSeg button").forEach((b) => (b.onclick = () => setMode(b.dataset.m, true)));
+// First visit: if a TV answers, be its remote; otherwise play on this phone.
+async function pickMode() {
+  const saved = store("ktv_mode");
+  if (saved === "local" || saved === "remote") return setMode(saved, false);
+  let tv = false;
+  on("state", () => { tv = true; });
+  emit("hello");
+  await new Promise((r) => setTimeout(r, 1500));
+  setMode(tv ? "remote" : "local", false);
+}
 
 // ================= boot =================
 async function boot() {
@@ -344,8 +515,8 @@ async function boot() {
   charts = await chartList();
   await loadMine();
   render();
+  await pickMode();
   refreshNow();
-  emit("hello");
   if (!me) openWho();
   setInterval(refreshNow, 10000);
 }
