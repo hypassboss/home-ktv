@@ -83,7 +83,7 @@ button{font-family:inherit;color:inherit}
 #nowBar .nx{font-size:1vw;color:var(--muted);margin-top:.3vw}
 #nowBar.dim{opacity:0}
 .layer-ctl{position:fixed;left:0;right:0;bottom:0;padding:2vw;display:flex;gap:1vw;justify-content:center;background:linear-gradient(transparent,rgba(0,0,0,.85))}
-.ctl{font-size:1.3vw;font-weight:700;padding:1vw 1.8vw;border-radius:99vw;border:0;background:rgba(255,255,255,.14);cursor:pointer}
+.ctl{font-size:1.25vw;font-weight:700;padding:1vw 1.5vw;border-radius:99vw;border:0;background:rgba(255,255,255,.14);cursor:pointer}
 .ctl:focus{background:var(--fg);color:var(--bg)}
 
 #home:not([hidden]) ~ #busy{inset:auto 1.6vw 1.6vw auto;padding:1vw 1.6vw;border-radius:var(--r);font-size:1.1vw;grid-auto-flow:column;gap:.8vw;background:var(--panel2)}

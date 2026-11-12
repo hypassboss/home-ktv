@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, searchSongs, members, favoritesOf, sungSongs,
   queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store,
-} from "./shared.js?v=1794447052";
+} from "./shared.js?v=1794447290";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -250,7 +250,7 @@ async function refreshNow() {
     : `<div class="now-empty">還沒有歌在播，點一首吧 🎤</div>`;
   if (view === "queue") renderQueue();
 }
-$$(".cbtn[data-c]").forEach((b) => (b.onclick = () => { emit("ctl", { cmd: b.dataset.c }); toast({ pause: "暫停 / 播放", skip: "切歌", replay: "重唱", alt: "換一個版本" }[b.dataset.c]); }));
+$$(".cbtn[data-c]").forEach((b) => (b.onclick = () => { emit("ctl", { cmd: b.dataset.c }); toast({ pause: "暫停 / 播放", skip: "切歌", replay: "重唱", alt: "換一個版本", guide: "導唱 開 / 關" }[b.dataset.c]); }));
 on("queue", refreshNow);
 on("state", (s) => { nowState = s; scorer.onState(s); refreshNow(); });
 on("ended", (p) => scorer.onEnded(p));

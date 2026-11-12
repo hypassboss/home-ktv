@@ -143,9 +143,17 @@ export function badges(s) {
 export function esc(t) {
   return String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+// "b" = backing track (no lead vocal), "g" = guide vocal (original singer: 導唱/原唱 KTV, MV, lyric video)
+export function kindOf(c) {
+  const t = c.t || "";
+  if (/導唱|导唱|KTV\s*原唱|原唱版|原聲版|原声版/i.test(t)) return "g";
+  if (/伴奏|伴唱|karaoke|卡拉|去人聲|去人声|消音|instrumental|純音樂|纯音乐|無人聲|无人声|no ?vocal|off ?vocal/i.test(t)) return "b";
+  if (/原唱/.test(t)) return "g";
+  return c.ktv ? "b" : "g";
+}
 export function bestVideo(song) {
   const c = (song.yt || []).filter((x) => !x.bad);
-  return c.find((x) => x.ktv) || c[0] || null;
+  return c.find((x) => x.ktv && kindOf(x) === "b") || c.find((x) => kindOf(x) === "b") || c.find((x) => x.ktv) || c[0] || null;
 }
 export function toast(msg, ms = 2200) {
   let el = document.getElementById("toast");

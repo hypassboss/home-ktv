@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, favoritesOf, sungSongs, queueNow, enqueue,
-  badges, esc, bestVideo, toast, store,
-} from "./shared.js?v=1794447052";
+  badges, esc, bestVideo, kindOf, toast, store,
+} from "./shared.js?v=1794447290";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -173,15 +173,15 @@ function drawQrTo(cv, url) {
 // ================= player =================
 let yt = null, ytReady = false, current = null, curVideo = null, paused = false, ending = false;
 window.onYouTubeIframeAPIReady = () => { ytReady = true; };
-function makePlayer(videoId) {
+function makePlayer(videoId, start = 0) {
   return new Promise((resolve, reject) => {
     const t0 = Date.now();
     const wait = () => (window.YT && YT.Player ? go() : Date.now() - t0 > 15000 ? reject(new Error("yt_api")) : setTimeout(wait, 200));
     const go = () => {
-      if (yt) { yt.loadVideoById(videoId); resolve(); return; }
+      if (yt) { yt.loadVideoById({ videoId, startSeconds: start }); resolve(); return; }
       yt = new YT.Player("player", {
         videoId,
-        playerVars: { autoplay: 1, controls: 0, rel: 0, modestbranding: 1, playsinline: 1, iv_load_policy: 3, fs: 0, disablekb: 1, cc_load_policy: 0 },
+        playerVars: { start: Math.floor(start), autoplay: 1, controls: 0, rel: 0, modestbranding: 1, playsinline: 1, iv_load_policy: 3, fs: 0, disablekb: 1, cc_load_policy: 0 },
         events: { onReady: (e) => { e.target.playVideo(); resolve(); }, onStateChange, onError },
       });
     };
@@ -196,6 +196,7 @@ function onStateChange(e) {
 async function onError(e) {
   // 100 removed, 101/150 embedding blocked, 2/5 bad id → mark and try another version
   if (!current || !curVideo) return;
+  guideOn = false;
   const song = current.song;
   current.errs = (current.errs || 0) + 1;
   busy(true, "這個版本不能播，換一個…");
@@ -240,6 +241,7 @@ async function startItem(item) {
   const v = bestVideo(song);
   if (!v) { toast(`找不到「${song.title}」的影片，跳下一首`); await finishCurrent("skipped"); return; }
   curVideo = v;
+  guideOn = kindOf(v) === "g";
   if (view !== "splash") show("playing");
   clearTimeout(busyT);
   busyT = setTimeout(() => { if (!$("#busy").hidden) { busy(false); toast("影片載入比較慢，可按 OK 叫出控制列切歌"); } }, 20000);
@@ -259,7 +261,7 @@ function updateNowBar(q) {
   const el = $("#nowBar");
   if (!current) { el.hidden = true; renderMiniNow(); return; }
   const m = current.member;
-  el.innerHTML = `<div class="who">${m ? esc(m.emoji + " " + m.name) + " 正在唱" : "正在唱"}</div>
+  el.innerHTML = `<div class="who">${m ? esc(m.emoji + " " + m.name) + " 正在唱" : "正在唱"}${guideOn ? " · 導唱中" : ""}</div>
     <div class="t">${esc(current.song.title)} <span class="muted" style="font-size:1.2vw;font-weight:500">${esc(current.song.artist || "")}</span></div>
     <div class="nx">${esc(nowText(lastQ).nx)}</div>`;
   el.hidden = view === "home";
@@ -282,6 +284,32 @@ function togglePause() {
 }
 async function skip() { if (current) await finishCurrent("skipped"); }
 function replay() { if (yt && current) { yt.seekTo(0, true); yt.playVideo(); flashNowBar(); } }
+// 導唱: switch between the backing video and an original-vocal video at the same position
+let guideOn = false;
+const guideCache = {};
+async function toggleGuide() {
+  if (!current || !yt) return;
+  const song = current.song, c = (song.yt || []).filter((x) => !x.bad);
+  const t = Math.max(0, (yt.getCurrentTime ? yt.getCurrentTime() : 0) || 0);
+  if (guideOn) {
+    const b = c.find((x) => kindOf(x) === "b");
+    if (!b) { toast("這首目前只有原唱版，沒有伴唱版"); return; }
+    guideOn = false; curVideo = b; await makePlayer(b.id, t); toast("導唱關閉（伴唱版）"); flashNowBar(); return;
+  }
+  let g = c.find((x) => kindOf(x) === "g") || guideCache[song.id];
+  if (!g) {
+    busy(true, "尋找原唱版本…");
+    try {
+      const r = await api("yt_search", { q: `${song.title} ${song.artist || ""} 原唱 歌詞` });
+      const ok = (v) => kindOf({ ...v, ktv: false }) === "g" && (!v.sec || (v.sec > 100 && v.sec < 540));
+      g = r.videos.find((v) => ok(v) && v.t.includes(song.title)) || null;
+      if (g) guideCache[song.id] = g;
+    } catch { /* fall through */ }
+    busy(false);
+  }
+  if (!g) { toast("找不到這首的原唱版本"); return; }
+  guideOn = true; curVideo = g; await makePlayer(g.id, t); toast("導唱開啟（原唱版）"); flashNowBar();
+}
 async function altVersion() {
   if (!current) return;
   const c = (current.song.yt || []).filter((x) => !x.bad);
@@ -366,6 +394,7 @@ $$("#ctlBar .ctl").forEach((b) => (b.onclick = () => {
   if (c === "skip") skip();
   if (c === "replay") replay();
   if (c === "alt") altVersion();
+  if (c === "guide") toggleGuide();
   if (c === "menu") { show("home"); renderTab(); return; }
   show("playing");
 }));
@@ -374,6 +403,7 @@ on("ctl", (p) => {
   if (p.cmd === "skip") skip();
   if (p.cmd === "replay") replay();
   if (p.cmd === "alt") altVersion();
+  if (p.cmd === "guide") toggleGuide();
 });
 // touch screens (phone/tablet used as the player): tap the video for controls, tap the mini bar to return
 $("#stage").onclick = () => { if (view === "playing") show("ctl"); };
