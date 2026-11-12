@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, searchSongs, members, favoritesOf, sungSongs,
   queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store,
-} from "./shared.js?v=1794446854";
+} from "./shared.js?v=1794447052";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];

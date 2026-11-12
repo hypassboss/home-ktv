@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, favoritesOf, sungSongs, queueNow, enqueue,
   badges, esc, bestVideo, toast, store,
-} from "./shared.js?v=1794446854";
+} from "./shared.js?v=1794447052";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -154,7 +154,7 @@ function renderMiniNow() {
   const el = $("#miniNow");
   if (!current) { el.hidden = true; return; }
   el.hidden = false;
-  el.innerHTML = `正在唱 <b>${esc(current.song.title)}</b><br><span class="muted">按返回鍵回到畫面</span>`;
+  el.innerHTML = `<span class="go">▶ 回到 KTV 影片</span><span class="muted">正在唱：${esc(current.song.title)}</span>`;
 }
 
 // ================= QR for phones =================
@@ -257,12 +257,13 @@ let lastQ = null;
 function updateNowBar(q) {
   lastQ = q || lastQ;
   const el = $("#nowBar");
-  if (!current) { el.hidden = true; return; }
+  if (!current) { el.hidden = true; renderMiniNow(); return; }
   const m = current.member;
   el.innerHTML = `<div class="who">${m ? esc(m.emoji + " " + m.name) + " 正在唱" : "正在唱"}</div>
     <div class="t">${esc(current.song.title)} <span class="muted" style="font-size:1.2vw;font-weight:500">${esc(current.song.artist || "")}</span></div>
     <div class="nx">${esc(nowText(lastQ).nx)}</div>`;
   el.hidden = view === "home";
+  if (view === "home") renderMiniNow();
 }
 let dimT = null;
 function flashNowBar() {
