@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, favoritesOf, sungSongs, queueNow, enqueue,
   badges, esc, bestVideo, toast, store,
-} from "./shared.js";
+} from "./shared.js?v=1794446854";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -105,7 +105,7 @@ function card(s, extra = "") {
 }
 function bindCards(root) {
   $$("[data-song]", root).forEach((b) => (b.onclick = async () => {
-    try { await enqueue(b.dataset.song, null); toast(current ? "已加入排隊" : "準備播放…"); refreshQueue(); }
+    try { const ok = await enqueue(b.dataset.song, null); toast(!ok ? "這首已經在排隊了" : current ? "已加入排隊" : "準備播放…"); refreshQueue(); }
     catch { toast("點歌失敗，請再試一次"); }
   }));
 }
@@ -215,6 +215,8 @@ async function refreshQueue() {
   const q = await queueNow();
   if (q.playing && (!current || current.id !== q.playing.id)) {
     // resume what was marked playing (e.g. after a reload)
+    const age = Date.now() - new Date(q.playing.started_at || q.playing.created_at).getTime();
+    if (age > 20 * 60e3) { await sb.from("ktv_queue").update({ status: "skipped" }).eq("id", q.playing.id); return refreshQueue(); }
     if (!advancing) startItem(q.playing);
   } else if (!q.playing && !current && q.queued.length && !advancing) {
     advancing = true;
@@ -238,7 +240,7 @@ async function startItem(item) {
   const v = bestVideo(song);
   if (!v) { toast(`找不到「${song.title}」的影片，跳下一首`); await finishCurrent("skipped"); return; }
   curVideo = v;
-  if (view !== "home") show("playing");
+  if (view !== "splash") show("playing");
   clearTimeout(busyT);
   busyT = setTimeout(() => { if (!$("#busy").hidden) { busy(false); toast("影片載入比較慢，可按 OK 叫出控制列切歌"); } }, 20000);
   try { await makePlayer(v.id); }
@@ -412,7 +414,9 @@ async function boot() {
   setTimeout(() => $("#startBtn").focus(), 50);
   $("#startBtn").onclick = () => {
     try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch { /* */ }
-    show("home"); renderTab(); refreshQueue();
+    show("home"); renderTab();
+    const old = new Date(Date.now() - 3 * 3600e3).toISOString();
+    sb.from("ktv_queue").update({ status: "skipped" }).in("status", ["queued", "playing"]).lt("created_at", old).then(() => refreshQueue(), () => refreshQueue());
   };
   if (store("ktv_autostart") === "1") $("#startBtn").click();
   setInterval(refreshQueue, 8000);

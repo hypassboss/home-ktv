@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, searchSongs, members, favoritesOf, sungSongs,
   queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store,
-} from "./shared.js";
+} from "./shared.js?v=1794446854";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -68,7 +68,7 @@ function row(s, opts = {}) {
 function bindRows(root) {
   $$("[data-add]", root).forEach((b) => (b.onclick = async () => {
     b.disabled = true;
-    try { await enqueue(b.dataset.add, me?.id); toast("已點歌 🎵"); refreshNow(); }
+    try { const ok = await enqueue(b.dataset.add, me?.id); toast(ok ? "已點歌 🎵" : "這首已經在排隊了"); refreshNow(); }
     catch { toast("點歌失敗，請再試一次"); }
     b.disabled = false;
   }));

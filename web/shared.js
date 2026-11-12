@@ -105,6 +105,8 @@ export async function queueNow() {
   return { playing: rows.find((r) => r.status === "playing") || null, queued: rows.filter((r) => r.status === "queued") };
 }
 export async function enqueue(songId, memberId) {
+  const { data: dup } = await sb.from("ktv_queue").select("id").eq("song_id", songId).in("status", ["queued", "playing"]).limit(1);
+  if (dup && dup.length) return false; // already waiting or playing
   const { error } = await sb.from("ktv_queue").insert({ song_id: songId, member_id: memberId || null });
   if (error) throw error;
   emit("queue");
@@ -112,6 +114,7 @@ export async function enqueue(songId, memberId) {
   sb.from("ktv_songs").select("yt_status").eq("id", songId).single().then(({ data }) => {
     if (data && data.yt_status !== "ok") api("resolve", { song_id: songId }).catch(() => {});
   });
+  return true;
 }
 export async function bumpToFront(queueId) {
   const { data } = await sb.from("ktv_queue").select("priority").eq("status", "queued").order("priority").limit(1);
