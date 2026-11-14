@@ -112,3 +112,21 @@ body.typing #pbox{display:none}
 .mgrid .cbtn{padding:15px 4px}
 #more .seg.mode button{font-size:15px;padding:12px 0}
 .mgrid .wide{grid-column:1/-1}
+
+/* ---- v4: reactions, song sheet, elder mode ---- */
+#react{display:flex;gap:6px;margin-top:8px;overflow-x:auto;scrollbar-width:none}
+#react::-webkit-scrollbar{display:none}
+#react button{flex:1 0 auto;min-width:44px;border:1px solid var(--line);background:var(--panel2);border-radius:99px;padding:7px 10px;font-size:16px;font-weight:700}
+#react button.pop{transform:scale(1.2);transition:transform .15s}
+.ctl-row .cbtn{font-size:16px}
+.song .meta{cursor:pointer}
+.sub.hd{font-size:16px;font-weight:900;color:var(--fg);margin:14px 2px 8px}
+.cbtn.go{background:linear-gradient(135deg,var(--pink),#9d3dff);border:0;color:#fff}
+#songSheet h2{margin:0 0 2px;font-size:22px}
+.fxfly{position:absolute;bottom:12%;z-index:4;font-size:40px;line-height:1;pointer-events:none;animation:fly 3.1s ease-out forwards;text-align:center;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))}
+.fxfly.txt{font-size:22px;font-weight:900;color:#fff;background:rgba(255,61,154,.85);padding:6px 12px;border-radius:99px}
+.fxfly small{display:block;font-size:12px;font-weight:700;color:#fff;margin-top:2px}
+@keyframes fly{0%{transform:translateY(0) scale(.6);opacity:0}12%{opacity:1;transform:translateY(-10px) scale(1.1)}100%{transform:translateY(-200px) scale(1);opacity:0}}
+body.elder{zoom:1.22}
+body.elder #react,body.elder #tabbar [data-v="artists"]{display:none}
+body.elder .ib.star,body.elder .ib.ins{display:none}

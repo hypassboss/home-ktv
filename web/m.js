@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, searchSongs, members, favoritesOf, sungSongs,
-  queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf, artistsList, songsByArtist, micOffer,
-} from "./shared.js?v=1794459913";
+  queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf, artistsList, songsByArtist, micOffer, SONG_COLS,
+} from "./shared.js?v=1794696200";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -11,7 +11,7 @@ let me = null;              // current member {id,name,emoji}
 let favIds = new Set();
 let dl = new Map();         // song_id -> status
 let charts = [];
-let view = "home", region = store("ktv_region") || "tw", chartSel = {};
+let view = "home", region = store("ktv_region") || "foryou", chartSel = {};
 
 // ================= who am I =================
 async function openWho() {
@@ -55,7 +55,8 @@ function row(s, opts = {}) {
   const dlBtn = opts.download
     ? `<button class="ib dl ${st === "done" ? "done" : st ? "req" : ""}" data-dl="${s.id}" aria-label="下載">${st === "done" ? "✓" : st ? "⏳" : "⬇"}</button>`
     : "";
-  return `<div class="song">
+  songCache.set(s.id, s);
+  return `<div class="song" data-sid="${s.id}">
     ${left}
     <div class="meta"><div class="t">${esc(s.title)}</div>
       <div class="a">${esc(s.artist || "")} ${badges(s)} ${info}</div></div>
@@ -66,7 +67,9 @@ function row(s, opts = {}) {
       <button class="ib go" data-add="${s.id}">點歌</button>
     </div></div>`;
 }
+let songCache = new Map();
 function bindRows(root) {
+  $$(".song[data-sid] .meta", root).forEach((m) => (m.onclick = () => openSongSheet(m.closest(".song").dataset.sid)));
   $$("[data-ins]", root).forEach((b) => (b.onclick = async () => {
     b.disabled = true;
     try { const ok = await enqueue(b.dataset.ins, me?.id, true); toast(ok ? "已插播，下一首就唱 ⤒" : "這首已經在排隊了"); refreshNow(); }
@@ -114,19 +117,53 @@ async function render() {
 $$("#tabbar button").forEach((b) => (b.onclick = () => { view = b.dataset.v; $("#q").value = ""; lastQ = ""; render(); window.scrollTo(0, 0); }));
 
 async function renderHome() {
+  if (region === "foryou") return renderForYou();
   const list = charts.filter((c) => c.region === region);
   const sel = chartSel[region] || list[0]?.id;
   chartSel[region] = sel;
-  V.innerHTML = `<div class="seg">${[["tw", "台灣排行"], ["cn", "大陸排行"], ["classic", "經典回憶"]].map(([k, n]) => `<button data-r="${k}" class="${k === region ? "on" : ""}">${n}</button>`).join("")}</div>
+  V.innerHTML = `${homeSeg()}
     <div class="chips">${list.map((c) => `<button class="chip ${c.id === sel ? "on" : ""}" data-chart="${c.id}">${esc(c.name)}</button>`).join("")}</div>
     <div id="chartBody"><div class="empty">載入中…</div></div>`;
-  $$("[data-r]", V).forEach((b) => (b.onclick = () => { region = b.dataset.r; store("ktv_region", region); renderHome(); }));
+  bindSeg();
   $$("[data-chart]", V).forEach((b) => (b.onclick = () => { chartSel[region] = b.dataset.chart; renderHome(); }));
   if (!sel) { $("#chartBody").innerHTML = `<div class="empty">排行榜還沒有資料</div>`; return; }
   const songs = await chartSongs(sel, 60);
   const c = list.find((x) => x.id === sel);
   $("#chartBody").innerHTML = `<div class="sub">${esc(c.source)}${c.updated_at ? " · 更新於 " + new Date(c.updated_at).toLocaleDateString("zh-TW") : ""}</div>
     <div class="list">${songs.map((s) => row(s, { rank: s.rank })).join("")}</div>`;
+  bindRows($("#chartBody"));
+}
+
+function homeSeg() {
+  return `<div class="seg">${[["foryou", "為你推薦"], ["tw", "台灣"], ["cn", "大陸"], ["classic", "經典"]].map(([k, n]) => `<button data-r="${k}" class="${k === region ? "on" : ""}">${n}</button>`).join("")}</div>`;
+}
+function bindSeg() { $$("[data-r]", V).forEach((b) => (b.onclick = () => { region = b.dataset.r; store("ktv_region", region); renderHome(); })); }
+// 猜你會唱: your most-sung singers' other songs + what the family likes; first-timers get the songs everyone knows
+async function renderForYou() {
+  V.innerHTML = `${homeSeg()}<div id="chartBody"><div class="empty">幫你挑歌中…</div></div>`;
+  bindSeg();
+  const sections = [];
+  const mine = me ? await sungSongs(me.id, 60) : [];
+  const sungIds = new Set(mine.map((s) => s.id));
+  if (mine.length) {
+    const w = new Map();
+    for (const s of mine) for (const a of (s.artist || "").split(/\s*[、,，&\/／]\s*/).filter(Boolean)) w.set(a, (w.get(a) || 0) + (s.times || 1));
+    const top = [...w.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map((x) => x[0]);
+    const lists = await Promise.all(top.map((a) => songsByArtist(a)));
+    const picks = [];
+    lists.forEach((songs) => songs.filter((s) => !sungIds.has(s.id) && s.yt_status !== "none").slice(0, 4).forEach((s) => picks.push(s)));
+    if (picks.length) sections.push(["你常唱的歌手，還有這些", picks]);
+    sections.push(["再唱一次", mine.slice(0, 8)]);
+  }
+  const fam = (await favoritesOf(null)).filter((s) => !sungIds.has(s.id)).slice(0, 10);
+  if (fam.length) sections.push(["家人的最愛", fam]);
+  if (!mine.length) {
+    const [ktv, c90, c00] = await Promise.all([chartSongs("cn-qq-ktv", 10), chartSongs("classic-90s", 10), chartSongs("classic-00s", 10)]);
+    sections.push(["KTV 最多人點", ktv], ["大家都會唱（90 年代）", c90], ["大家都會唱（2000 年代）", c00]);
+  }
+  if (region !== "foryou" || !$("#chartBody")) return;
+  $("#chartBody").innerHTML = sections.filter(([, s]) => s.length).map(([h, s]) => `<div class="sub hd">${esc(h)}</div><div class="list">${s.map((x) => row(x)).join("")}</div>`).join("")
+    || `<div class="empty">唱幾首之後，這裡會依你的習慣推薦</div>`;
   bindRows($("#chartBody"));
 }
 
@@ -232,17 +269,56 @@ async function renderQueue() {
     `<div class="sub" style="margin-top:12px">接下來（${q.queued.length} 首）</div>` +
     (q.queued.length ? `<div class="list">${q.queued.map((r, i) => `<div class="song"><span class="rk">${i + 1}</span>
       <div class="meta"><div class="t">${esc(r.song.title)}</div><div class="a">${esc(r.song.artist || "")} · ${who(r)}</div></div>
-      <div class="acts">${i > 0 ? `<button class="ib" data-up="${r.id}" aria-label="插播">⤒ 插播</button>` : ""}<button class="ib" data-rm="${r.id}" aria-label="移除">✕</button></div></div>`).join("")}</div>`
+      <div class="acts">${i > 0 ? `<button class="ib" data-mv="${i}" aria-label="往前一首">↑</button><button class="ib" data-up="${r.id}" aria-label="插播">⤒ 置頂</button>` : ""}<button class="ib" data-rm="${r.id}" aria-label="移除">✕</button></div></div>`).join("")}</div>`
       : `<div class="empty">還沒有點歌。到「點歌」或「歌星」選歌，或用上面的搜尋</div>`);
-  $$("[data-up]").forEach((b) => (b.onclick = async () => { await bumpToFront(+b.dataset.up); toast("已插播到下一首"); renderQueue(); }));
+  $$("[data-up]").forEach((b) => (b.onclick = async () => { await bumpToFront(+b.dataset.up); toast("已移到下一首"); renderQueue(); }));
+  $$("[data-mv]").forEach((b) => (b.onclick = async () => {
+    const i = +b.dataset.mv, a = q.queued[i - 1], c = q.queued[i];
+    await sb.from("ktv_queue").update({ priority: a.priority }).eq("id", c.id);
+    await sb.from("ktv_queue").update({ priority: c.priority === a.priority ? a.priority + 0.5 : c.priority }).eq("id", a.id);
+    emit("queue"); renderQueue();
+  }));
   $$("[data-rm]").forEach((b) => (b.onclick = async () => { await removeQueued(+b.dataset.rm); renderQueue(); }));
 }
+function openSongSheet(id) {
+  const s = songCache.get(id); if (!s) return;
+  const first = (s.artist || "").split(/\s*[、,，&\/／]\s*/)[0];
+  const fav = favIds.has(id);
+  $("#songSheet .sheet-in").innerHTML = `<h2>${esc(s.title)}</h2><p class="muted">${esc(s.artist || "")}</p>
+    <div class="mgrid">
+      <button class="cbtn go" data-act="add">🎵 點歌</button>
+      <button class="cbtn" data-act="ins">⤒ 插播（下一首）</button>
+      <button class="cbtn" data-act="fav">${fav ? "★ 取消最愛" : "☆ 加入最愛"}</button>
+      ${first ? `<button class="cbtn" data-act="artist">🧑‍🎤 ${esc(first)} 的其他歌</button>` : ""}
+      <button class="cbtn wide" data-act="close">取消</button>
+    </div>`;
+  $("#songSheet").hidden = false;
+  $$("#songSheet [data-act]").forEach((b) => (b.onclick = async () => {
+    const a = b.dataset.act;
+    $("#songSheet").hidden = true;
+    if (a === "add" || a === "ins") {
+      try { const ok = await enqueue(id, me?.id, a === "ins"); toast(!ok ? "這首已經在排隊了" : a === "ins" ? "已插播，下一首就唱 ⤒" : "已點歌 🎵"); refreshNow(); }
+      catch { toast("點歌失敗，請再試一次"); }
+    }
+    if (a === "fav") $(`[data-fav="${id}"]`)?.click();
+    if (a === "artist") { curArtist = first; view = "artist"; $("#q").value = ""; render(); window.scrollTo(0, 0); }
+  }));
+}
+$("#songSheet").onclick = (e) => { if (e.target.id === "songSheet") $("#songSheet").hidden = true; };
+
 // ---- 歌星 ----
 let artistFilter = "all", artistsCache = null, curArtist = "";
 async function renderArtists() {
-  const F = [["all", "全部"], ["male", "男歌手"], ["female", "女歌手"], ["group", "團體"]];
+  const F = [["all", "全部"], ["male", "男歌手"], ["female", "女歌手"], ["group", "團體"], ["duet", "對唱合唱"]];
   V.innerHTML = `<div class="chips">${F.map(([k, n]) => `<button class="chip ${k === artistFilter ? "on" : ""}" data-af="${k}">${n}</button>`).join("")}</div><div id="ab"><div class="empty">載入中…</div></div>`;
   $$("[data-af]", V).forEach((b) => (b.onclick = () => { artistFilter = b.dataset.af; renderArtists(); }));
+  if (artistFilter === "duet") {
+    const { data } = await sb.from("ktv_songs").select(SONG_COLS).eq("gender", "duet").neq("yt_status", "none").order("title").limit(300);
+    if (view !== "artists" || artistFilter !== "duet" || !$("#ab")) return;
+    $("#ab").innerHTML = (data || []).length ? `<div class="sub">兩人以上一起唱的歌，共 ${data.length} 首</div><div class="list">${data.map((s) => row(s)).join("")}</div>` : `<div class="empty">歌庫裡還沒有對唱歌曲</div>`;
+    bindRows($("#ab"));
+    return;
+  }
   artistsCache = artistsCache || (await artistsList());
   if (view !== "artists" || !$("#ab")) return;
   const list = artistsCache.filter((a) => artistFilter === "all" || a.gender === artistFilter);
@@ -293,7 +369,28 @@ async function refreshNow() {
     : `<div class="now-empty">還沒有歌在播，點一首吧 🎤</div>`;
   if (view === "queue") renderQueue();
 }
-const CTL_NAME = { pause: "暫停 / 播放", skip: "切歌", replay: "重唱", alt: "換一個版本", guide: "導唱 開 / 關", fx: "掌聲 👏" };
+const CTL_NAME = { pause: "暫停 / 播放", skip: "切歌", replay: "重唱", alt: "換一個版本", guide: "導唱 開 / 關", fx: "掌聲 👏", ff: "快轉 10 秒" };
+// reactions: fly up on the screen that plays the video
+function floatFx(box, text, who) {
+  if (!box) return;
+  const el = document.createElement("div");
+  el.className = "fxfly" + (text.length > 2 ? " txt" : "");
+  el.style.left = 8 + Math.random() * 74 + "%";
+  el.innerHTML = `${esc(text)}${who ? `<small>${esc(who)}</small>` : ""}`;
+  box.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+$$("#react [data-e]").forEach((b) => (b.onclick = () => {
+  const e = b.dataset.e, who = me?.name || "";
+  if (mode === "local") { floatFx($("#pbox"), e, who); if (e === "👏") clap(); }
+  else emit("react", { e, who });
+  b.classList.add("pop"); setTimeout(() => b.classList.remove("pop"), 300);
+}));
+on("react", (p) => { if (mode === "local") { floatFx($("#pbox"), String(p.e || "").slice(0, 8), p.who); if (p.e === "👏") clap(); } });
+// 長輩模式: everything bigger, fewer distractions
+function setElder(on) { document.body.classList.toggle("elder", on); store("ktv_elder", on ? "1" : "0"); $("#elderBtn").textContent = on ? "👓 長輩模式：開" : "👓 長輩模式：關"; }
+$("#elderBtn").onclick = () => setElder(!document.body.classList.contains("elder"));
+setElder(store("ktv_elder") === "1");
 // more sheet
 $("#moreBtn").onclick = () => { $("#more").hidden = false; };
 $("#moreClose").onclick = () => { $("#more").hidden = true; };
@@ -572,6 +669,7 @@ const P = (() => {
     if (c === "pause") { if (paused || !started) yt.playVideo(); else yt.pauseVideo(); }
     if (c === "skip") finish("skipped");
     if (c === "replay") { yt.seekTo(0, true); yt.playVideo(); }
+    if (c === "ff") { yt.seekTo((yt.getCurrentTime ? yt.getCurrentTime() : 0) + 10, true); toast("快轉 10 秒 ⏩"); }
     if (c === "guide") guide().catch((e) => { console.error("guide", e); toast("導唱切換失敗"); });
     if (c === "alt") alt().catch((e) => { console.error("alt", e); toast("換版本失敗"); });
   }

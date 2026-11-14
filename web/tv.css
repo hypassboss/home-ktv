@@ -103,3 +103,8 @@ button{font-family:inherit;color:inherit}
 #toast{position:fixed;left:50%;bottom:3vw;transform:translateX(-50%) translateY(2vw);background:var(--fg);color:var(--bg);font-weight:700;font-size:1.3vw;padding:.9vw 2vw;border-radius:99vw;opacity:0;transition:.25s;z-index:99;pointer-events:none}
 #toast.show{opacity:1;transform:translateX(-50%)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.fxfly{position:fixed;bottom:14vh;z-index:20;font-size:6vw;line-height:1;pointer-events:none;animation:fly 3.5s ease-out forwards;text-align:center;filter:drop-shadow(0 .3vw .6vw rgba(0,0,0,.6))}
+.fxfly.txt{font-size:2.6vw;font-weight:900;color:#fff;background:rgba(255,61,154,.88);padding:.7vw 1.6vw;border-radius:99vw}
+.fxfly small{display:block;font-size:1.1vw;font-weight:700;color:#fff;margin-top:.3vw}
+@keyframes fly{0%{transform:translateY(0) scale(.6);opacity:0}12%{opacity:1;transform:translateY(-1vh) scale(1.1)}100%{transform:translateY(-45vh) scale(1);opacity:0}}

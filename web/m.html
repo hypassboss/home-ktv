@@ -25,7 +25,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
-<link rel="stylesheet" href="m.css?v=1794459913">
+<link rel="stylesheet" href="m.css?v=1794696200">
 </head>
 <body>
 <header id="top">
@@ -36,6 +36,7 @@
     <div id="fsbar">
       <button class="cbtn" data-c="pause">⏯</button>
       <button class="cbtn" data-c="skip">切歌</button>
+      <button class="cbtn" data-c="ff">⏩10秒</button>
       <button class="cbtn" data-c="replay">重唱</button>
       <button class="cbtn" data-c="guide">導唱</button>
       <button class="cbtn" data-c="fs">✕ 離開全螢幕</button>
@@ -45,9 +46,13 @@
   <div class="ctl-row">
     <button class="cbtn" data-c="pause" aria-label="暫停或播放">⏯</button>
     <button class="cbtn" data-c="skip">切歌</button>
+    <button class="cbtn" data-c="ff">⏩10秒</button>
     <button class="cbtn" data-c="replay">重唱</button>
     <button class="cbtn" data-c="guide">導唱</button>
     <button class="cbtn" id="moreBtn">更多</button>
+  </div>
+  <div id="react">
+    <button data-e="👏">👏</button><button data-e="❤️">❤️</button><button data-e="🔥">🔥</button><button data-e="😂">😂</button><button data-e="🎉">🎉</button><button data-e="好聽！">好聽</button><button data-e="安可！">安可</button>
   </div>
   <form class="searchbox" id="sf">
     <input id="q" type="search" placeholder="搜尋歌名、歌星" autocomplete="off" enterkeyhint="search">
@@ -78,11 +83,14 @@
       <button class="cbtn mic wide" id="micLive" aria-pressed="false">🎤 手機當麥克風</button>
       <button class="cbtn" data-c="alt">🔀 換一個版本</button>
       <button class="cbtn" data-c="fs" id="fsBtn" hidden>⛶ 全螢幕</button>
+      <button class="cbtn" id="elderBtn">👓 長輩模式：關</button>
       <button class="cbtn" id="swBtn">👤 換人</button>
       <button class="cbtn" id="moreClose">關閉</button>
     </div>
   </div>
 </div>
+
+<div id="songSheet" class="sheet" hidden><div class="sheet-in"></div></div>
 
 <div id="who" class="sheet" hidden>
   <div class="sheet-in">
@@ -92,6 +100,6 @@
     <form id="whoForm"><input id="whoName" placeholder="新增名字，例如：Stanley" maxlength="12" autocomplete="off"><button>新增</button></form>
   </div>
 </div>
-<script type="module" src="m.js?v=1794459913"></script>
+<script type="module" src="m.js?v=1794696200"></script>
 </body>
 </html>

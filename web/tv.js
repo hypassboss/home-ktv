@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, favoritesOf, sungSongs, queueNow, enqueue,
   badges, esc, bestVideo, kindOf, toast, store, micAnswer,
-} from "./shared.js?v=1794459913";
+} from "./shared.js?v=1794696200";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -283,6 +283,18 @@ function togglePause() {
   if (paused) yt.playVideo(); else yt.pauseVideo();
 }
 async function skip() { if (current) await finishCurrent("skipped"); }
+function fastForward() { if (yt && current) { yt.seekTo((yt.getCurrentTime ? yt.getCurrentTime() : 0) + 10, true); toast("快轉 10 秒 ⏩"); } }
+// reactions sent from phones float up over the video
+on("react", (p) => {
+  const e = String(p.e || "").slice(0, 8); if (!e) return;
+  const el = document.createElement("div");
+  el.className = "fxfly" + (e.length > 2 ? " txt" : "");
+  el.style.left = 8 + Math.random() * 80 + "%";
+  el.innerHTML = `${esc(e)}${p.who ? `<small>${esc(String(p.who).slice(0, 12))}</small>` : ""}`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3600);
+  if (e === "👏") applause();
+});
 function replay() { if (yt && current) { yt.seekTo(0, true); yt.playVideo(); flashNowBar(); } }
 // 導唱: switch between the backing video and an original-vocal video at the same position
 let guideOn = false;
@@ -393,6 +405,7 @@ $$("#ctlBar .ctl").forEach((b) => (b.onclick = () => {
   if (c === "pause") togglePause();
   if (c === "skip") skip();
   if (c === "replay") replay();
+  if (c === "ff") fastForward();
   if (c === "alt") altVersion();
   if (c === "guide") toggleGuide();
   if (c === "menu") { show("home"); renderTab(); return; }
@@ -405,6 +418,7 @@ on("ctl", (p) => {
   if (p.cmd === "alt") altVersion();
   if (p.cmd === "guide") toggleGuide();
   if (p.cmd === "fx") applause();
+  if (p.cmd === "ff") fastForward();
 });
 // touch screens (phone/tablet used as the player): tap the video for controls, tap the mini bar to return
 $("#stage").onclick = () => { if (view === "playing") show("ctl"); };
