@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, favoritesOf, sungSongs, queueNow, enqueue,
-  badges, esc, bestVideo, kindOf, toast, store, micAnswer,
-} from "./shared.js?v=1794698353";
+  badges, esc, bestVideo, kindOf, toast, store, micAnswer, findGuide, forgetGuide, ytThumb, artistsList, songsByArtist,
+} from "./shared.js?v=1794700598";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -80,81 +80,120 @@ function onBack() {
 }
 
 // ================= home menu =================
+// Same structure as the phone: 點歌 (category tabs) · 排行榜 · 歌星 · 最愛 · 常唱 · 已點
 const TABS = [
-  { id: "home", name: "首頁" },
-  { id: "tw", name: "台灣排行" },
-  { id: "cn", name: "大陸排行" },
-  { id: "classic", name: "經典回憶" },
-  { id: "fav", name: "家人最愛" },
-  { id: "sung", name: "常唱的歌" },
-  { id: "queue", name: "排隊中" },
+  { id: "home", ico: "🎵", name: "點歌" },
+  { id: "charts", ico: "🏆", name: "排行榜" },
+  { id: "artists", ico: "🧑‍🎤", name: "歌星" },
+  { id: "fav", ico: "⭐", name: "家人最愛" },
+  { id: "sung", ico: "🕘", name: "常唱的歌" },
+  { id: "queue", ico: "📋", name: "已點" },
 ];
-let tab = "home", charts = [], chartSel = {};
+const CATS = [["foryou", "為你推薦"], ["cn-qq-ktv", "K歌金曲"], ["tw-kkbox-song", "華語熱門"], ["tw-kkbox-new", "新歌"], ["cn-douyin", "抖音熱歌"],
+  ["classic-90s", "經典老歌"], ["classic-00s", "2000 年代"], ["classic-tw", "台語"], ["classic-hk", "粵語"], ["classic-duet", "男女對唱"]];
+let tab = "home", charts = [], chartSel = {}, cat = store("ktv_tvcat") || "foryou", chartRegion = "tw", artistSel = "", artistG = "all", qCount = 0;
 function renderTabs() {
-  $("#tabs").innerHTML = TABS.map((t) => `<button class="f tab ${t.id === tab ? "on" : ""}" data-tab="${t.id}">${t.name}</button>`).join("");
-  $$("#tabs .tab").forEach((b) => (b.onclick = () => { tab = b.dataset.tab; renderTabs(); renderTab(); $(`#tabs [data-tab="${tab}"]`).focus(); }));
+  $("#tabs").innerHTML = TABS.map((t) => `<button class="f tab ${t.id === tab ? "on" : ""}" data-tab="${t.id}"><i>${t.ico}</i>${t.name}${t.id === "queue" && qCount ? `<b class="cnt">${qCount}</b>` : ""}</button>`).join("");
+  $$("#tabs .tab").forEach((b) => (b.onclick = () => { tab = b.dataset.tab; artistSel = ""; renderTabs(); renderTab(); $(`#tabs [data-tab="${tab}"]`).focus(); }));
 }
 function card(s, extra = "") {
-  return `<button class="f card" data-song="${s.id}">
-    ${s.rank ? `<span class="rk">${s.rank}</span>` : ""}
-    <span class="t">${esc(s.title)}</span>
+  const v = bestVideo(s);
+  const rk = s.rank ? `<span class="rk ${s.rank <= 3 ? "top" : ""}">${s.rank}</span>` : "";
+  return `<button class="f card ${s.yt_status === "none" ? "na" : ""}" data-song="${s.id}">
+    <span class="cv">${v ? `<img loading="lazy" alt="" src="${ytThumb(v)}" onerror="this.remove()">` : ""}<span class="ph">${esc((s.title || "?").slice(0, 1))}</span>${rk}<span class="go">🎤 K歌</span></span>
+    <span class="tx"><span class="t">${esc(s.title)}</span>
     <span class="a">${esc(s.artist || "")}</span>
     ${extra}
-    <span class="b">${badges(s)}</span>
+    <span class="b">${badges(s)}</span></span>
   </button>`;
 }
 function bindCards(root) {
   $$("[data-song]", root).forEach((b) => (b.onclick = async () => {
-    try { const ok = await enqueue(b.dataset.song, null); toast(!ok ? "這首已經在排隊了" : current ? "已加入排隊" : "準備播放…"); refreshQueue(); }
+    try { const ok = await enqueue(b.dataset.song, null); toast(!ok ? "這首已經在排隊了" : current ? "已加入排隊 🎵" : "準備播放…"); refreshQueue(); }
     catch { toast("點歌失敗，請再試一次"); }
   }));
 }
+const grid = (songs, ex) => `<div class="grid">${songs.map((s) => card(s, ex ? ex(s) : "")).join("")}</div>`;
+function chipRow(items, sel, attr) {
+  return items.map(([k, n]) => `<button class="f chip ${k === sel ? "on" : ""}" ${attr}="${esc(k)}">${esc(n)}</button>`).join("");
+}
 async function renderTab() {
-  const head = $("#mainHead"), box = $("#content");
+  const head = $("#mainHead"), box = $("#content"), my = tab + cat + chartRegion + artistSel + artistG;
+  const stale = () => tab + cat + chartRegion + artistSel + artistG !== my;
   box.innerHTML = `<div class="empty">載入中…</div>`;
   if (tab === "home") {
-    head.innerHTML = `<h2>今晚想唱什麼？</h2>`;
-    const [sung, top, ktv, classic] = await Promise.all([
-      sungSongs(null, 10), chartSongs("tw-kkbox-song", 10), chartSongs("cn-qq-ktv", 10), chartSongs("classic-90s", 10),
-    ]);
-    box.innerHTML =
-      (sung.length ? `<div class="row-title">全家常唱 <small>唱過最多次</small></div><div class="grid">${sung.map((s) => card(s, `<span class="who">唱過 ${s.times} 次</span>`)).join("")}</div>` : "") +
-      `<div class="row-title">KKBOX 華語單曲週榜 <small>台灣</small></div><div class="grid">${top.map((s) => card(s)).join("")}</div>` +
-      `<div class="row-title">K歌金曲榜 <small>大陸 KTV 熱唱</small></div><div class="grid">${ktv.map((s) => card(s)).join("")}</div>` +
-      `<div class="row-title">90 年代經典 <small>大家都會唱</small></div><div class="grid">${classic.map((s) => card(s)).join("")}</div>`;
-  } else if (tab === "tw" || tab === "cn" || tab === "classic") {
-    const list = charts.filter((c) => c.region === tab);
-    const sel = chartSel[tab] || list[0]?.id;
-    chartSel[tab] = sel;
-    head.innerHTML = `<h2>${TABS.find((t) => t.id === tab).name}</h2>` +
-      list.map((c) => `<button class="f chip ${c.id === sel ? "on" : ""}" data-chart="${c.id}">${esc(c.name)}</button>`).join("");
-    $$("[data-chart]", head).forEach((b) => (b.onclick = () => { chartSel[tab] = b.dataset.chart; renderTab().then(() => $(`[data-chart="${b.dataset.chart}"]`)?.focus()); }));
-    const songs = await chartSongs(sel, 60);
+    const cats = CATS.filter(([k]) => k === "foryou" || charts.some((c) => c.id === k));
+    if (!cats.some(([k]) => k === cat)) cat = "foryou";
+    head.innerHTML = `<h2>點歌</h2>${chipRow(cats, cat, "data-cat")}`;
+    $$("[data-cat]", head).forEach((b) => (b.onclick = () => { cat = b.dataset.cat; store("ktv_tvcat", cat); renderTab().then(() => $(`[data-cat="${cat}"]`)?.focus()); }));
+    if (cat === "foryou") {
+      const [sung, fav, ktv, top] = await Promise.all([sungSongs(null, 10), favoritesOf(null), chartSongs("cn-qq-ktv", 10), chartSongs("tw-kkbox-song", 10)]);
+      if (stale()) return;
+      box.innerHTML =
+        (sung.length ? `<div class="row-title">全家常唱 <small>唱過最多次</small></div>${grid(sung, (s) => `<span class="who">唱過 ${s.times} 次</span>`)}` : "") +
+        (fav.length ? `<div class="row-title">家人的最愛</div>${grid(fav.slice(0, 10))}` : "") +
+        `<div class="row-title">KTV 最多人點 <small>K歌金曲</small></div>${grid(ktv)}` +
+        `<div class="row-title">華語熱門 <small>KKBOX 週榜</small></div>${grid(top)}`;
+    } else {
+      const songs = await chartSongs(cat, 60);
+      if (stale()) return;
+      box.innerHTML = songs.length ? grid(songs) : `<div class="empty">這個分類還沒有歌</div>`;
+    }
+  } else if (tab === "charts") {
+    const list = charts.filter((c) => c.region === chartRegion);
+    const sel = chartSel[chartRegion] || list[0]?.id;
+    chartSel[chartRegion] = sel;
+    head.innerHTML = `<h2>排行榜</h2>${chipRow([["tw", "台灣"], ["cn", "大陸"], ["classic", "經典"]], chartRegion, "data-reg")}<span class="sep"></span>${chipRow(list.map((c) => [c.id, c.name]), sel, "data-chart")}`;
+    $$("[data-reg]", head).forEach((b) => (b.onclick = () => { chartRegion = b.dataset.reg; renderTab().then(() => $(`[data-reg="${chartRegion}"]`)?.focus()); }));
+    $$("[data-chart]", head).forEach((b) => (b.onclick = () => { chartSel[chartRegion] = b.dataset.chart; renderTab().then(() => $(`[data-chart="${b.dataset.chart}"]`)?.focus()); }));
+    const songs = sel ? await chartSongs(sel, 60) : [];
+    if (stale()) return;
     const c = list.find((x) => x.id === sel);
     box.innerHTML = `<div class="row-title">${esc(c?.name || "")} <small>${esc(c?.source || "")}${c?.updated_at ? " · 更新於 " + new Date(c.updated_at).toLocaleDateString("zh-TW") : ""}</small></div>
-      <div class="grid">${songs.map((s) => card(s)).join("") || `<div class="empty">還沒有資料</div>`}</div>`;
+      ${songs.length ? grid(songs) : `<div class="empty">還沒有資料</div>`}`;
+  } else if (tab === "artists") {
+    if (artistSel) {
+      head.innerHTML = `<button class="f chip" id="abk">‹ 歌星</button><h2>${esc(artistSel)}</h2>`;
+      $("#abk").onclick = () => { artistSel = ""; renderTab().then(() => focusFirst($("#content"))); };
+      const songs = await songsByArtist(artistSel);
+      if (stale()) return;
+      box.innerHTML = songs.length ? grid(songs) : `<div class="empty">歌庫裡還沒有這位歌星的歌，可以用手機搜尋 YouTube 加進來</div>`;
+    } else {
+      head.innerHTML = `<h2>歌星</h2>${chipRow([["all", "全部"], ["male", "男歌手"], ["female", "女歌手"], ["group", "團體"]], artistG, "data-ag")}`;
+      $$("[data-ag]", head).forEach((b) => (b.onclick = () => { artistG = b.dataset.ag; renderTab().then(() => $(`[data-ag="${artistG}"]`)?.focus()); }));
+      artistsCache ||= await artistsList();
+      if (stale()) return;
+      const list = artistsCache.filter((a) => artistG === "all" || a.gender === artistG);
+      box.innerHTML = `<div class="agrid">${list.map((a) => `<button class="f abtn" data-artist="${esc(a.name)}"><b>${esc(a.name)}</b><small>${a.n} 首</small></button>`).join("")}</div>`;
+      $$("[data-artist]", box).forEach((b) => (b.onclick = () => { artistSel = b.dataset.artist; renderTab().then(() => focusFirst($("#content"))); }));
+    }
   } else if (tab === "fav") {
     head.innerHTML = `<h2>家人最愛</h2>`;
     const songs = await favoritesOf(null);
-    box.innerHTML = songs.length ? `<div class="grid">${songs.map((s) => card(s)).join("")}</div>` : `<div class="empty">還沒有人加最愛。用手機點歌時按 ★ 就會出現在這裡。</div>`;
+    if (stale()) return;
+    box.innerHTML = songs.length ? grid(songs) : `<div class="empty">還沒有人加最愛。手機點歌時按歌曲右邊的 ⋮ →「加入最愛」。</div>`;
   } else if (tab === "sung") {
     head.innerHTML = `<h2>常唱的歌</h2>`;
     const songs = await sungSongs(null, 60);
-    box.innerHTML = songs.length ? `<div class="grid">${songs.map((s) => card(s, `<span class="who">唱過 ${s.times} 次${s.best ? " · 最高 " + s.best + " 分" : ""}</span>`)).join("")}</div>` : `<div class="empty">還沒有唱過的歌，唱完的歌會自動記在這裡。</div>`;
+    if (stale()) return;
+    box.innerHTML = songs.length ? grid(songs, (s) => `<span class="who">唱過 ${s.times} 次${s.best ? " · 最高 " + s.best + " 分" : ""}</span>`) : `<div class="empty">還沒有唱過的歌，唱完的歌會自動記在這裡。</div>`;
   } else if (tab === "queue") {
-    head.innerHTML = `<h2>排隊中</h2>`;
+    head.innerHTML = `<h2>已點</h2>`;
     const q = await queueNow();
+    if (stale()) return;
     const rows = [q.playing, ...q.queued].filter(Boolean);
-    box.innerHTML = rows.length ? `<div class="grid">${rows.map((r, i) => card(r.song, `<span class="who">${i === 0 && q.playing ? "▶ 正在唱" : "第 " + (q.playing ? i : i + 1) + " 首"}${r.member ? " · " + esc(r.member.emoji + r.member.name) : ""}</span>`)).join("")}</div>` : `<div class="empty">還沒有人點歌。</div>`;
+    box.innerHTML = rows.length ? `<div class="grid">${rows.map((r, i) => card(r.song, `<span class="who">${i === 0 && q.playing ? "▶ 正在唱" : "第 " + (q.playing ? i : i + 1) + " 首"}${r.member ? " · " + esc(r.member.emoji + r.member.name) : ""}</span>`)).join("")}</div>` : `<div class="empty">還沒有人點歌。用遙控器選一首，或用手機掃左下角 QR Code 點歌。</div>`;
   }
   bindCards(box);
   if (view === "home" && !$("#home").contains(document.activeElement)) focusFirst(box);
 }
+let artistsCache = null;
 function renderMiniNow() {
   const el = $("#miniNow");
   if (!current) { el.hidden = true; return; }
   el.hidden = false;
-  el.innerHTML = `<span class="go">▶ 回到 KTV 影片</span><span class="muted">正在唱：${esc(current.song.title)}</span>`;
+  const v = curVideo || bestVideo(current.song);
+  el.innerHTML = `${v ? `<img alt="" src="${ytThumb(v)}" onerror="this.remove()">` : ""}<span class="go">▶ 回到影片</span><span class="muted">${esc(current.song.title)}</span>`;
 }
 
 // ================= QR for phones =================
@@ -196,6 +235,7 @@ function onStateChange(e) {
 async function onError(e) {
   // 100 removed, 101/150 embedding blocked, 2/5 bad id → mark and try another version
   if (!current || !curVideo) return;
+  if (guideOn && backing) { forgetGuide(current.song.id); guideOn = false; curVideo = backing; toast("這個原唱版不能播，回到伴唱版"); await makePlayer(backing.id); return; }
   guideOn = false;
   const song = current.song;
   current.errs = (current.errs || 0) + 1;
@@ -228,6 +268,8 @@ async function refreshQueue() {
     startItem({ ...next, status: "playing" });
   }
   updateNowBar(q);
+  const n = q.queued.length + (q.playing ? 1 : 0);
+  if (n !== qCount) { qCount = n; const had = document.activeElement?.dataset?.tab; renderTabs(); if (had) $(`#tabs [data-tab="${had}"]`)?.focus(); }
   if (view === "home" && tab === "queue") renderTab();
 }
 async function startItem(item) {
@@ -240,7 +282,7 @@ async function startItem(item) {
   current.song = song;
   const v = bestVideo(song);
   if (!v) { toast(`找不到「${song.title}」的影片，跳下一首`); await finishCurrent("skipped"); return; }
-  curVideo = v;
+  curVideo = v; backing = null;
   guideOn = kindOf(v) === "g";
   if (view !== "splash") show("playing");
   clearTimeout(busyT);
@@ -283,7 +325,7 @@ function togglePause() {
   if (paused) yt.playVideo(); else yt.pauseVideo();
 }
 async function skip() { if (current) await finishCurrent("skipped"); }
-function fastForward() { if (yt && current) { yt.seekTo((yt.getCurrentTime ? yt.getCurrentTime() : 0) + 10, true); toast("快轉 10 秒 ⏩"); } }
+function fastForward() { seekBy(5); }
 // reactions sent from phones float up over the video
 on("react", (p) => {
   const e = String(p.e || "").slice(0, 8); if (!e) return;
@@ -296,32 +338,28 @@ on("react", (p) => {
   if (e === "👏") applause();
 });
 function replay() { if (yt && current) { yt.seekTo(0, true); yt.playVideo(); flashNowBar(); } }
-// 導唱: switch between the backing video and an original-vocal video at the same position
-let guideOn = false;
-const guideCache = {};
+// 導唱: switch to a vocal version at the same moment; prefer the same channel's 導唱 cut so the timing lines up
+let guideOn = false, backing = null;
 async function toggleGuide() {
   if (!current || !yt) return;
-  const song = current.song, c = (song.yt || []).filter((x) => !x.bad);
+  const song = current.song;
   const t = Math.max(0, (yt.getCurrentTime ? yt.getCurrentTime() : 0) || 0);
   if (guideOn) {
-    const b = c.find((x) => kindOf(x) === "b");
+    const b = backing || (song.yt || []).find((x) => !x.bad && kindOf(x) === "b");
     if (!b) { toast("這首目前只有原唱版，沒有伴唱版"); return; }
     guideOn = false; curVideo = b; await makePlayer(b.id, t); toast("導唱關閉（伴唱版）"); flashNowBar(); return;
   }
-  let g = c.find((x) => kindOf(x) === "g") || guideCache[song.id];
-  if (!g) {
-    busy(true, "尋找原唱版本…");
-    try {
-      const r = await api("yt_search", { q: `${song.title} ${song.artist || ""} 原唱 歌詞` });
-      const ok = (v) => kindOf({ ...v, ktv: false }) === "g" && (!v.sec || (v.sec > 100 && v.sec < 540));
-      g = r.videos.find((v) => ok(v) && v.t.includes(song.title)) || null;
-      if (g) guideCache[song.id] = g;
-    } catch { /* fall through */ }
-    busy(false);
-  }
-  if (!g) { toast("找不到這首的原唱版本"); return; }
-  guideOn = true; curVideo = g; await makePlayer(g.id, t); toast("導唱開啟（原唱版）"); flashNowBar();
+  busy(true, "尋找對得上拍子的原唱版…");
+  const r = await findGuide(song, curVideo).catch(() => null);
+  busy(false);
+  if (current?.song.id !== song.id) return;
+  if (!r) { toast("找不到這首的原唱版本"); return; }
+  backing = curVideo; guideOn = true; curVideo = r.v;
+  await makePlayer(r.v.id, t);
+  toast(r.synced ? "導唱開啟（同一支伴唱帶的原唱版，拍子對齊）" : "導唱開啟（原唱 MV 版）· 歌聲快或慢的話用 ⏪ ⏩ 對拍", 4500);
+  flashNowBar();
 }
+function seekBy(d) { if (yt && current) { yt.seekTo(Math.max(0, (yt.getCurrentTime ? yt.getCurrentTime() : 0) + d), true); toast(d > 0 ? `快轉 ${d} 秒 ⏩` : `倒退 ${-d} 秒 ⏪`); } }
 async function altVersion() {
   if (!current) return;
   const c = (current.song.yt || []).filter((x) => !x.bad);
@@ -406,6 +444,7 @@ $$("#ctlBar .ctl").forEach((b) => (b.onclick = () => {
   if (c === "skip") skip();
   if (c === "replay") replay();
   if (c === "ff") fastForward();
+  if (c === "back") seekBy(-5);
   if (c === "alt") altVersion();
   if (c === "guide") toggleGuide();
   if (c === "menu") { show("home"); renderTab(); return; }
@@ -419,6 +458,7 @@ on("ctl", (p) => {
   if (p.cmd === "guide") toggleGuide();
   if (p.cmd === "fx") applause();
   if (p.cmd === "ff") fastForward();
+  if (p.cmd === "back") seekBy(-5);
 });
 // touch screens (phone/tablet used as the player): tap the video for controls, tap the mini bar to return
 $("#stage").onclick = () => { if (view === "playing") show("ctl"); };

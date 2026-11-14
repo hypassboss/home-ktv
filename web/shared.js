@@ -179,6 +179,39 @@ export function bestVideo(song) {
   const c = (song.yt || []).filter((x) => !x.bad);
   return c.find((x) => x.ktv && kindOf(x) === "b") || c.find((x) => kindOf(x) === "b") || c.find((x) => x.ktv) || c[0] || null;
 }
+// 導唱: find an original-vocal video that lines up with the backing video now playing.
+// Best = same uploader + same length (KTV channels publish 伴唱/導唱 pairs cut from one master → same timeline).
+const guideMemo = {};
+export async function findGuide(song, cur) {
+  if (guideMemo[song.id]) return guideMemo[song.id];
+  const titleKey = (song.title || "").replace(/\s+/g, "");
+  const rate = (v) => {
+    if (!v || v.bad || v.id === cur?.id) return -99;
+    if (kindOf({ ...v, ktv: false }) !== "g") return -99;
+    if (v.sec && (v.sec < 100 || v.sec > 540)) return -99;
+    let sc = 0;
+    if ((v.t || "").replace(/\s+/g, "").includes(titleKey)) sc += 3; else sc -= 4;
+    if (cur?.ch && v.ch && v.ch === cur.ch) sc += 6;
+    if (/導唱|导唱/.test(v.t || "")) sc += 3;
+    if (/KTV|卡拉|伴唱/i.test(v.t || "")) sc += 1;
+    if (cur?.sec && v.sec) { const d = Math.abs(v.sec - cur.sec); sc += d <= 2 ? 5 : d <= 6 ? 2 : d > 30 ? -3 : 0; }
+    return sc;
+  };
+  let pool = (song.yt || []).slice();
+  let best = null;
+  const pick = () => { best = pool.map((v) => [rate(v), v]).filter(([r]) => r > -20).sort((x, y) => y[0] - x[0])[0] || null; };
+  pick();
+  for (const q of [`${song.title} ${song.artist || ""} 導唱`, `${song.title} ${song.artist || ""} 原唱 歌詞`]) {
+    if (best && best[0] >= 9) break;
+    try { const r = await api("yt_search", { q }); pool = pool.concat(r.videos || []); pick(); } catch { /* */ }
+  }
+  if (!best || best[0] < 0) return null;
+  const v = best[1];
+  const synced = !!(cur && ((cur.ch && v.ch === cur.ch) || (cur.sec && v.sec && Math.abs(cur.sec - v.sec) <= 2)));
+  return (guideMemo[song.id] = { v, synced });
+}
+export function forgetGuide(songId) { delete guideMemo[songId]; }
+export const ytThumb = (v) => (v ? `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg` : "");
 export function toast(msg, ms = 2200) {
   let el = document.getElementById("toast");
   if (!el) { el = document.createElement("div"); el.id = "toast"; document.body.appendChild(el); }

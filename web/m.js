@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, searchSongs, members, favoritesOf, sungSongs,
-  queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf, artistsList, songsByArtist, micOffer, SONG_COLS,
-} from "./shared.js?v=1794699157";
+  queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf, findGuide, forgetGuide, artistsList, songsByArtist, micOffer, SONG_COLS,
+} from "./shared.js?v=1794700598";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -453,7 +453,7 @@ async function refreshNow() {
     : `<div class="up"><small>還沒有下一首</small></div>`;
   if (view === "queue") renderQueue();
 }
-const CTL_NAME = { pause: "暫停 / 播放", skip: "切歌", replay: "重唱", alt: "換一個版本", guide: "導唱 開 / 關", fx: "掌聲 👏", ff: "快轉 10 秒" };
+const CTL_NAME = { pause: "暫停 / 播放", skip: "切歌", replay: "重唱", alt: "換一個版本", guide: "導唱 開 / 關", fx: "掌聲 👏", ff: "快轉 5 秒", back: "倒退 5 秒" };
 // reactions: fly up on the screen that plays the video
 function floatFx(box, text, who) {
   if (!box) return;
@@ -669,6 +669,7 @@ const P = (() => {
   }
   async function onError() {
     if (!current || !curVideo) return;
+    if (guideOn && backing) { forgetGuide(current.song.id); guideOn = false; curVideo = backing; toast("這個原唱版不能播，回到伴唱版"); await load(backing.id); return; }
     guideOn = false; current.errs = (current.errs || 0) + 1;
     msg("這個版本不能播，換一個…");
     if (current.errs <= 3) try {
@@ -688,7 +689,7 @@ const P = (() => {
     current.song = song;
     const v = bestVideo(song);
     if (!v) { toast(`找不到「${song.title}」的影片，跳下一首`); return finish("skipped"); }
-    curVideo = v; guideOn = kindOf(v) === "g";
+    curVideo = v; guideOn = kindOf(v) === "g"; backing = null;
     try { await load(v.id); } catch { msg("YouTube 載入失敗，請檢查網路"); return; }
     clearTimeout(nudgeT);
     nudgeT = setTimeout(() => { if (current === item && !started) msg("▶ 點一下開始播放", "tap"); }, 4000);
@@ -724,26 +725,23 @@ const P = (() => {
       emit("queue"); start({ ...next, status: "playing" });
     }
   }
+  // 導唱: jump to a vocal version at the same moment; remember the backing video to come back to
+  let backing = null, guideSync = true;
   async function guide() {
-    const song = current.song, c = (song.yt || []).filter((x) => !x.bad);
+    const song = current.song;
     const t = Math.max(0, (yt.getCurrentTime ? yt.getCurrentTime() : 0) || 0);
     if (guideOn) {
-      const b = c.find((x) => kindOf(x) === "b");
+      const b = backing || (song.yt || []).find((x) => !x.bad && kindOf(x) === "b");
       if (!b) { toast("這首目前只有原唱版，沒有伴唱版"); return; }
       guideOn = false; curVideo = b; await load(b.id, t); toast("導唱關閉（伴唱版）"); return;
     }
-    let g = c.find((x) => kindOf(x) === "g") || guideCache[song.id];
-    if (!g) {
-      toast("尋找原唱版本…");
-      try {
-        const r = await api("yt_search", { q: `${song.title} ${song.artist || ""} 原唱 歌詞` });
-        const ok = (v) => kindOf({ ...v, ktv: false }) === "g" && (!v.sec || (v.sec > 100 && v.sec < 540));
-        g = r.videos.find((v) => ok(v) && v.t.includes(song.title)) || null;
-        if (g) guideCache[song.id] = g;
-      } catch { /* */ }
-    }
-    if (!g) { toast("找不到這首的原唱版本"); return; }
-    guideOn = true; curVideo = g; await load(g.id, t); toast("導唱開啟（原唱版）");
+    toast("尋找對得上拍子的原唱版…");
+    const r = await findGuide(song, curVideo);
+    if (current?.song.id !== song.id) return;
+    if (!r) { toast("找不到這首的原唱版本"); return; }
+    backing = curVideo; guideSync = r.synced;
+    guideOn = true; curVideo = r.v; await load(r.v.id, t);
+    toast(r.synced ? "導唱開啟（同一支伴唱帶的原唱版，拍子對齊）" : "導唱開啟（原唱 MV 版）。如果歌聲快或慢幾秒，用 ⏪ ⏩ 對拍", 4200);
   }
   async function alt() {
     const c = (current.song.yt || []).filter((x) => !x.bad);
@@ -769,7 +767,7 @@ const P = (() => {
     if (c === "pause") { if (paused || !started) yt.playVideo(); else yt.pauseVideo(); }
     if (c === "skip") finish("skipped");
     if (c === "replay") { yt.seekTo(0, true); yt.playVideo(); }
-    if (c === "ff") { yt.seekTo((yt.getCurrentTime ? yt.getCurrentTime() : 0) + 10, true); toast("快轉 10 秒 ⏩"); }
+    if (c === "ff" || c === "back") { const d = c === "ff" ? 5 : -5; yt.seekTo(Math.max(0, (yt.getCurrentTime ? yt.getCurrentTime() : 0) + d), true); toast(d > 0 ? "快轉 5 秒 ⏩" : "倒退 5 秒 ⏪"); }
     if (c === "guide") guide().catch((e) => { console.error("guide", e); toast("導唱切換失敗"); });
     if (c === "alt") alt().catch((e) => { console.error("alt", e); toast("換版本失敗"); });
   }
