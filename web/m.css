@@ -116,40 +116,40 @@ button{cursor:pointer}
 
 /* ---- singing screen (dark) ---- */
 #pl{position:fixed;inset:0;z-index:50;overflow-y:auto;background:#100d18;color:#f4f1fb;padding:calc(8px + env(safe-area-inset-top,0px)) max(14px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px))}
-.plbar{display:flex;align-items:center;gap:10px;height:48px}
-#plClose{flex:none;width:44px;height:44px;border:0;border-radius:50%;background:rgba(255,255,255,.1);color:#fff;font-size:26px;line-height:1}
+.plbar{display:flex;align-items:center;gap:10px;height:40px}
+#plClose{flex:none;width:40px;height:40px;border:0;border-radius:50%;background:rgba(255,255,255,.1);color:#fff;font-size:26px;line-height:1}
 #pl .seg{flex:1;margin:0;background:rgba(255,255,255,.08)}
-#pl .seg button{color:#b9b3c9;padding:9px 0}
+#pl .seg button{color:#b9b3c9;padding:6px 0;font-size:15px}
 #pl .seg button.on{background:var(--grad);color:#fff;box-shadow:none}
-#vslot{position:relative;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#000;margin:8px 0 10px}
+#vslot{position:relative;aspect-ratio:16/9;overflow:hidden;background:#000;margin:8px calc(-1 * max(14px,env(safe-area-inset-right,0px))) 10px calc(-1 * max(14px,env(safe-area-inset-left,0px)))}
 #vimg{width:100%;height:100%;object-fit:cover;opacity:.55}
 #vnote{position:absolute;inset:0;display:grid;place-content:center;text-align:center;font-weight:700;font-size:16px;padding:12px}
-#pl .now .lab{font-size:14px;color:#ff8aa3}
-#pl .now .t{font-size:24px;font-weight:900;line-height:1.25}
-#pl .now .a{font-size:15px;color:#b9b3c9;margin-top:2px}
+#pl .now{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:8px}#pl .now .lab{font-size:13px;color:#ff8aa3;width:100%}
+#pl .now .t{font-size:20px;font-weight:900;line-height:1.3}
+#pl .now .a{font-size:14px;color:#b9b3c9}
 #pl .now .now-empty{color:#b9b3c9;font-size:16px;padding:6px 0}
-.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0 10px}
-.pb{border:0;border-radius:16px;background:rgba(255,255,255,.08);color:#fff;padding:12px 4px;font-size:15px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:4px}
-.pb i{font-style:normal;font-size:24px;line-height:1}
+.pgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:12px 0 10px}
+.pb{border:0;border-radius:12px;background:rgba(255,255,255,.08);color:#fff;padding:8px 0 6px;font-size:12px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;white-space:nowrap}
+.pb i{font-style:normal;font-size:20px;line-height:1}
 .pb:active,.pb2:active{transform:scale(.96)}
-#react{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-bottom:6px}
+#react{display:flex;gap:5px;margin-bottom:6px}
 #react::-webkit-scrollbar{display:none}
-#react button{flex:1 0 auto;min-width:46px;border:0;background:rgba(255,255,255,.08);color:#fff;border-radius:99px;padding:9px 12px;font-size:17px;font-weight:700}
+#react button{flex:1;min-width:0;border:0;background:rgba(255,255,255,.08);color:#fff;border-radius:99px;padding:6px 0;font-size:15px;font-weight:700;white-space:nowrap}
 #react button.pop{transform:scale(1.2);transition:transform .15s}
-.plsec{font-size:15px;font-weight:900;color:#b9b3c9;margin:16px 0 6px}
+.plsec{font-size:14px;font-weight:900;color:#b9b3c9;margin:14px 0 4px}
 #upnext .up{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.08)}
 #upnext .up span{flex:none;width:20px;color:#b9b3c9;font-weight:900;text-align:center}
 #upnext .up b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:16px}
 #upnext .up small{flex:none;color:#b9b3c9}
 .mgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.pb2{border:0;border-radius:14px;background:rgba(255,255,255,.08);color:#fff;padding:14px 4px;font-size:15px;font-weight:700}
+.pb2{border:0;border-radius:12px;background:rgba(255,255,255,.08);color:#fff;padding:11px 4px;font-size:14px;font-weight:700}
 .pb2.mic[aria-pressed=true]{background:var(--grad)}
 
 /* ---- the video element: big on the singing screen, small in the mini player ---- */
 #pbox{position:fixed;z-index:52;background:#000;overflow:hidden;
   left:calc(max(10px,env(safe-area-inset-left,0px)) + 6px);bottom:calc(var(--navh) + 8px + 6px + env(safe-area-inset-bottom,0px));width:112px;height:63px;border-radius:8px}
 body:not(.has-song):not(.pl-open) #pbox{visibility:hidden}
-body.pl-open #pbox{left:max(14px,env(safe-area-inset-left,0px));right:max(14px,env(safe-area-inset-right,0px));width:auto;height:auto;aspect-ratio:16/9;bottom:auto;top:calc(8px + 48px + 8px + env(safe-area-inset-top,0px));border-radius:12px}
+body.pl-open #pbox{left:0;right:0;width:auto;height:auto;aspect-ratio:16/9;bottom:auto;top:calc(8px + 40px + 8px + env(safe-area-inset-top,0px));border-radius:0}
 #pbox #player,#pbox iframe{position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none}
 #ptap{position:absolute;inset:0}
 #pmsg{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:4px;text-align:center;background:rgba(13,10,23,.82);color:#fff;font-weight:700;padding:12px;pointer-events:none;font-size:15px}
@@ -190,4 +190,9 @@ body.elder{zoom:1.2}
 body.elder .tiles .tile:nth-child(n+3),body.elder #tabbar [data-v="artists"],body.elder .more{display:none}
 body.elder .tiles{grid-template-columns:1fr 1fr}
 
-@media (orientation:landscape) and (max-height:520px){body.pl-open #pbox{left:50%;transform:translateX(-50%);right:auto;height:56vh;width:auto}#vslot{height:56vh;width:auto;margin-inline:auto}}
+@media (orientation:landscape) and (max-height:540px){
+  body.pl-open #pbox{inset:0;top:0;width:100vw;height:100vh;aspect-ratio:auto;z-index:60}
+  body.pl-open #pbox #fsbar.show{display:flex;position:absolute;left:0;right:0;bottom:0;gap:8px;justify-content:center;flex-wrap:wrap;padding:12px;background:linear-gradient(transparent,rgba(0,0,0,.88))}
+}
+/* small phones: keep the six controls on one line */
+@media (max-width:360px){.pb{font-size:11px}.pb i{font-size:18px}}

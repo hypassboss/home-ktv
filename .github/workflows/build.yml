@@ -17,12 +17,18 @@ concurrency:
 jobs:
   site:
     name: Publish web (GitHub Pages)
+    needs: apk
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: HomeKTV-apk
+          path: dl
+      - run: cp dl/HomeKTV.apk web/tv.apk   # short link for the TV's Downloader app
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, searchSongs, members, favoritesOf, sungSongs,
   queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf, artistsList, songsByArtist, micOffer, SONG_COLS,
-} from "./shared.js?v=1794698353";
+} from "./shared.js?v=1794699157";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -398,6 +398,12 @@ async function renderMine() {
       <div class="acts"><button class="ib" id="swMe">換人</button></div></div>
     <div class="seg"><button data-mt="fav" class="${mineTab === "fav" ? "on" : ""}">我的最愛</button><button data-mt="sung" class="${mineTab === "sung" ? "on" : ""}">唱過的歌</button></div>
     <div id="mb"><div class="empty">載入中…</div></div>
+    <div class="sub hd">📺 裝到電視</div>
+    <div class="sub" style="font-size:15px;line-height:1.8;color:var(--fg)">
+      1. 電視開 Google Play，安裝「<b>Downloader</b>」（橘色圖示）<br>
+      2. 打開 Downloader，網址輸入：<br><b style="font-size:17px;color:var(--pink)">hypassboss.github.io/home-ktv/tv.apk</b><br>
+      3. 第一次會要求「允許安裝不明來源」→ 允許 → 安裝<br>
+      4. 開「家庭 KTV」，電視出現 QR Code，用這支手機掃一下就配對好了</div>
     <button class="ytbtn" id="elderBtn" style="color:var(--fg)">👓 長輩模式（字更大、按鈕更少）：${elder ? "開" : "關"}</button>`;
   $$("[data-mt]", V).forEach((b) => (b.onclick = () => { mineTab = b.dataset.mt; renderMine(); }));
   $("#swMe").onclick = openWho;
@@ -753,7 +759,8 @@ const P = (() => {
   document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement) { fsbar.classList.remove("show"); try { screen.orientation.unlock(); } catch { /* */ } } });
   $("#ptap").onclick = () => {
     if (current && yt && (!started || paused)) { yt.playVideo(); return; }
-    if (document.fullscreenElement) { fsbar.classList.toggle("show"); clearTimeout(fsT); fsT = setTimeout(() => fsbar.classList.remove("show"), 4000); }
+    if (!document.body.classList.contains("pl-open")) { openPlayer(); return; }
+    if (document.fullscreenElement || matchMedia("(orientation:landscape) and (max-height:540px)").matches) { fsbar.classList.toggle("show"); clearTimeout(fsT); fsT = setTimeout(() => fsbar.classList.remove("show"), 4000); }
   };
   function cmd(c) {
     if (c === "fs") return fullscreen();
