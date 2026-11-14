@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#171228">
+<meta name="theme-color" content="#ffffff">
 <meta name="mobile-web-app-capable" content="yes">
 <title>家庭 KTV · 點歌</title>
 <script>
@@ -25,68 +25,82 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
-<link rel="stylesheet" href="m.css?v=1794696200">
+<link rel="stylesheet" href="m.css?v=1794698353">
 </head>
 <body>
+<!-- ===== browse: search on top, songs fill the screen ===== -->
 <header id="top">
-  <div id="pbox" hidden>
-    <div id="player"></div>
-    <div id="ptap"></div>
-    <div id="pmsg" hidden></div>
-    <div id="fsbar">
-      <button class="cbtn" data-c="pause">⏯</button>
-      <button class="cbtn" data-c="skip">切歌</button>
-      <button class="cbtn" data-c="ff">⏩10秒</button>
-      <button class="cbtn" data-c="replay">重唱</button>
-      <button class="cbtn" data-c="guide">導唱</button>
-      <button class="cbtn" data-c="fs">✕ 離開全螢幕</button>
-    </div>
-  </div>
-  <div class="now" id="now"><div class="now-empty">還沒有歌在播，點一首吧 🎤</div></div>
-  <div class="ctl-row">
-    <button class="cbtn" data-c="pause" aria-label="暫停或播放">⏯</button>
-    <button class="cbtn" data-c="skip">切歌</button>
-    <button class="cbtn" data-c="ff">⏩10秒</button>
-    <button class="cbtn" data-c="replay">重唱</button>
-    <button class="cbtn" data-c="guide">導唱</button>
-    <button class="cbtn" id="moreBtn">更多</button>
-  </div>
-  <div id="react">
-    <button data-e="👏">👏</button><button data-e="❤️">❤️</button><button data-e="🔥">🔥</button><button data-e="😂">😂</button><button data-e="🎉">🎉</button><button data-e="好聽！">好聽</button><button data-e="安可！">安可</button>
-  </div>
+  <button id="avatar" aria-label="換人">🎤</button>
   <form class="searchbox" id="sf">
+    <span class="sic" aria-hidden="true">🔍</span>
     <input id="q" type="search" placeholder="搜尋歌名、歌星" autocomplete="off" enterkeyhint="search">
-    <button type="button" class="voice" id="voiceBtn" aria-label="語音點歌">🎤</button>
+    <button type="button" class="voice" id="voiceBtn" aria-label="語音點歌">🎙</button>
   </form>
 </header>
 
 <main id="view"></main>
 
+<!-- mini player: shows while a song plays and the singing screen is closed -->
+<div id="mini" hidden>
+  <div class="mthumb"><img id="miniImg" alt=""></div>
+  <div class="mt"><b id="miniT"></b><small id="miniA"></small></div>
+  <button class="mb" data-c="pause" aria-label="暫停或播放">⏯</button>
+  <button class="mb" data-c="skip" aria-label="切歌">⏭</button>
+</div>
+
 <nav id="tabbar">
   <button data-v="home" class="on"><span>🎵</span>點歌</button>
   <button data-v="artists"><span>🧑‍🎤</span>歌星</button>
+  <button id="singBtn" class="sing" aria-label="開始唱歌"><span>🎤</span></button>
   <button data-v="queue"><span>📋</span>已點<b id="qBadge" hidden></b></button>
-  <button data-v="mine"><span>★</span>我的</button>
+  <button data-v="mine"><span>👤</span>我的</button>
 </nav>
 
-<div id="more" class="sheet" hidden>
-  <div class="sheet-in">
-    <h2>更多功能</h2>
-    <p class="muted">影片要在哪裡播？</p>
+<!-- ===== singing screen ===== -->
+<section id="pl" hidden>
+  <div class="plbar">
+    <button id="plClose" aria-label="回到點歌">⌄</button>
     <div class="seg mode" id="modeSeg">
-      <button data-m="local">📱 在這支手機唱</button>
-      <button data-m="remote">📺 遙控電視</button>
+      <button data-m="local">📱 手機唱</button>
+      <button data-m="remote">📺 電視唱</button>
     </div>
-    <div class="mgrid">
-      <button class="cbtn" data-c="fx">👏 掌聲</button>
-      <button class="cbtn mic" id="micBtn" aria-pressed="false">🎙 評分麥克風</button>
-      <button class="cbtn mic wide" id="micLive" aria-pressed="false">🎤 手機當麥克風</button>
-      <button class="cbtn" data-c="alt">🔀 換一個版本</button>
-      <button class="cbtn" data-c="fs" id="fsBtn" hidden>⛶ 全螢幕</button>
-      <button class="cbtn" id="elderBtn">👓 長輩模式：關</button>
-      <button class="cbtn" id="swBtn">👤 換人</button>
-      <button class="cbtn" id="moreClose">關閉</button>
-    </div>
+  </div>
+  <div id="vslot"><img id="vimg" alt=""><div id="vnote"></div></div>
+  <div class="now" id="now"></div>
+  <div class="pgrid">
+    <button class="pb" data-c="pause"><i>⏯</i>暫停</button>
+    <button class="pb" data-c="skip"><i>⏭</i>切歌</button>
+    <button class="pb" data-c="ff"><i>⏩</i>快轉10秒</button>
+    <button class="pb" data-c="replay"><i>🔁</i>重唱</button>
+    <button class="pb" data-c="guide"><i>🗣</i>導唱</button>
+    <button class="pb" data-c="alt"><i>🔀</i>換版本</button>
+  </div>
+  <div id="react">
+    <button data-e="👏">👏</button><button data-e="❤️">❤️</button><button data-e="🔥">🔥</button><button data-e="😂">😂</button><button data-e="🎉">🎉</button><button data-e="好聽！">好聽</button><button data-e="安可！">安可</button>
+  </div>
+  <div class="plsec">接下來</div>
+  <div id="upnext"></div>
+  <div class="plsec">更多</div>
+  <div class="mgrid">
+    <button class="pb2 mic" id="micBtn" aria-pressed="false">🎙 評分</button>
+    <button class="pb2 mic" id="micLive" aria-pressed="false">🎤 手機當麥克風</button>
+    <button class="pb2" data-c="fs" id="fsBtn">⛶ 全螢幕</button>
+    <button class="pb2" id="plBrowse">🎵 繼續點歌</button>
+  </div>
+</section>
+
+<!-- the video: one element, shown big on the singing screen and small in the mini player -->
+<div id="pbox" hidden>
+  <div id="player"></div>
+  <div id="ptap"></div>
+  <div id="pmsg" hidden></div>
+  <div id="fsbar">
+    <button class="cbtn" data-c="pause">⏯</button>
+    <button class="cbtn" data-c="skip">切歌</button>
+    <button class="cbtn" data-c="ff">⏩10秒</button>
+    <button class="cbtn" data-c="replay">重唱</button>
+    <button class="cbtn" data-c="guide">導唱</button>
+    <button class="cbtn" data-c="fs">✕ 離開全螢幕</button>
   </div>
 </div>
 
@@ -100,6 +114,6 @@
     <form id="whoForm"><input id="whoName" placeholder="新增名字，例如：Stanley" maxlength="12" autocomplete="off"><button>新增</button></form>
   </div>
 </div>
-<script type="module" src="m.js?v=1794696200"></script>
+<script type="module" src="m.js?v=1794698353"></script>
 </body>
 </html>
