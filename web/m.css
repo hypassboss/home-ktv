@@ -196,3 +196,16 @@ body.elder .tiles{grid-template-columns:1fr 1fr}
 }
 /* small phones: keep the six controls on one line */
 @media (max-width:360px){.pb{font-size:11px}.pb i{font-size:18px}}
+
+/* 收藏 */
+#nowFav{margin-left:auto;align-self:center;border:1px solid rgba(255,255,255,.25);background:transparent;color:#fff;border-radius:99px;padding:5px 12px;font-size:14px;font-weight:700}
+#nowFav.on{background:var(--grad);border-color:transparent}
+#pl .now .lab{order:-1}
+#likeBar{position:fixed;left:12px;right:12px;bottom:calc(var(--navh) + 92px + env(safe-area-inset-bottom,0px));z-index:80;background:#fff;color:var(--fg);border-radius:16px;box-shadow:0 8px 28px rgba(0,0,0,.28);padding:12px 12px 12px 16px;display:flex;align-items:center;gap:8px;font-size:15px;animation:likein .25s ease-out}
+body.pl-open #likeBar{bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+#likeBar span{flex:1;min-width:0}
+#likeBar b{font-weight:900}
+.likeyes{flex:none;border:0;border-radius:99px;background:var(--grad);color:#fff;font-weight:900;padding:10px 14px}
+.likeno{flex:none;border:0;background:transparent;font-size:18px;color:var(--muted);width:32px}
+@keyframes likein{from{transform:translateY(20px);opacity:0}}
+.favbar{display:flex;align-items:center;justify-content:space-between;margin:2px 0 6px;font-size:14px;color:var(--muted)}

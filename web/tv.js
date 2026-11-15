@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, favoritesOf, sungSongs, queueNow, enqueue,
-  badges, esc, bestVideo, kindOf, toast, store, micAnswer, findGuide, forgetGuide, ytThumb, artistsList, songsByArtist,
-} from "./shared.js?v=1794700598";
+  badges, esc, bestVideo, kindOf, toast, store, micAnswer, findGuide, forgetGuide, ytThumb, songsByIds, artistsList, songsByArtist,
+} from "./shared.js?v=1794702229";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -169,9 +169,17 @@ async function renderTab() {
     }
   } else if (tab === "fav") {
     head.innerHTML = `<h2>家人最愛</h2>`;
-    const songs = await favoritesOf(null);
+    const [{ data: fr }, { data: mem }] = await Promise.all([
+      sb.from("ktv_favorites").select("member_id,song_id,created_at").order("created_at", { ascending: false }),
+      sb.from("ktv_members").select("id,name,emoji").order("created_at"),
+    ]);
+    const songs = await songsByIds([...new Set((fr || []).map((r) => r.song_id))]);
     if (stale()) return;
-    box.innerHTML = songs.length ? grid(songs) : `<div class="empty">還沒有人加最愛。手機點歌時按歌曲右邊的 ⋮ →「加入最愛」。</div>`;
+    const byId = new Map(songs.map((x) => [x.id, x]));
+    box.innerHTML = (mem || []).map((m) => {
+      const mine = (fr || []).filter((r) => r.member_id === m.id).map((r) => byId.get(r.song_id)).filter(Boolean);
+      return mine.length ? `<div class="row-title">${esc(m.emoji + " " + m.name)} 的最愛 <small>${mine.length} 首</small></div>${grid(mine)}` : "";
+    }).join("") || `<div class="empty">還沒有人加最愛。唱歌時在手機按 ♡ 收藏，或唱完時按「❤ 加入最愛」。</div>`;
   } else if (tab === "sung") {
     head.innerHTML = `<h2>常唱的歌</h2>`;
     const songs = await sungSongs(null, 60);
@@ -393,7 +401,7 @@ async function songEnded() {
   const { data: h } = await sb.from("ktv_history").insert({ member_id: item.member_id, song_id: item.song.id }).select("id").single();
   const hid = h?.id;
   scoreWait = { hid, scores: [] };
-  emit("ended", { qid: item.id, hid });
+  emit("ended", { qid: item.id, hid, song_id: item.song.id, title: item.song.title });
   const el = $("#score");
   el.hidden = false; el.classList.remove("pop");
   el.innerHTML = `<div class="s-msg">唱完了！</div><div class="s-sub">評分中…</div>`;
@@ -404,10 +412,10 @@ async function songEnded() {
   applause();
   if (best) {
     if (hid) await sb.from("ktv_history").update({ score: best.score }).eq("id", hid);
-    el.innerHTML = `<div class="s-who">${esc(who)}　${esc(item.song.title)}</div><div class="s-num">${best.score}</div><div class="s-msg">${praise(best.score)}</div>`;
+    el.innerHTML = `<div class="s-who">${esc(who)}　${esc(item.song.title)}</div><div class="s-num">${best.score}</div><div class="s-msg">${praise(best.score)}</div><div class="s-sub">喜歡這首？手機上按 ❤ 加入最愛</div>`;
     el.classList.add("pop");
   } else {
-    el.innerHTML = `<div class="s-who">${esc(who)}　${esc(item.song.title)}</div><div class="s-msg" style="font-size:5vw">👏 唱得好！</div><div class="s-sub">想要分數？手機點歌頁打開「評分麥克風」</div>`;
+    el.innerHTML = `<div class="s-who">${esc(who)}　${esc(item.song.title)}</div><div class="s-msg" style="font-size:5vw">👏 唱得好！</div><div class="s-sub">想要分數？手機點歌頁打開「評分麥克風」</div><div class="s-sub">喜歡這首？手機上按 ❤ 加入最愛</div>`;
   }
   await new Promise((r) => setTimeout(r, 4500));
   el.hidden = true;

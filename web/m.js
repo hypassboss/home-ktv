@@ -1,7 +1,7 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, searchSongs, members, favoritesOf, sungSongs,
   queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf, findGuide, forgetGuide, artistsList, songsByArtist, micOffer, SONG_COLS,
-} from "./shared.js?v=1794700598";
+} from "./shared.js?v=1794702229";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -391,12 +391,30 @@ async function renderArtist() {
 
 // ---- 我的：最愛 / 唱過 ----
 let mineTab = "fav";
+// 我的最愛 auto-organises itself: by how often you sing it, by singer, language, decade, voice
+const FAV_VIEWS = [["recent", "最近加入"], ["most", "最常唱"], ["never", "還沒唱過"], ["artist", "依歌手"], ["lang", "依語言"], ["era", "依年代"], ["voice", "男女對唱"]];
+let favView = store("ktv_favview") || "recent";
+const firstArtist = (s) => (s.artist || "").split(/\s*[、,，&\/／]\s*/)[0] || "其他";
+function groupFav(songs, how) {
+  const g = new Map(), add = (k, s) => { if (!g.has(k)) g.set(k, []); g.get(k).push(s); };
+  if (how === "artist") songs.forEach((s) => add(firstArtist(s), s));
+  if (how === "lang") songs.forEach((s) => add(s.language === "taiwanese" ? "台語" : s.language === "cantonese" ? "粵語" : !s.language || s.language === "mandarin" ? "國語" : "其他語言", s));
+  if (how === "era") songs.forEach((s) => { const d = s.era ? Math.floor(s.era / 10) * 10 : 0; add(!d ? "年代未知" : d < 1990 ? "80 年代以前" : d < 2000 ? "90 年代" : `${d} 年代`, s); });
+  if (how === "voice") songs.forEach((s) => add(s.gender === "male" ? "男生歌" : s.gender === "female" ? "女生歌" : s.gender === "duet" || s.gender === "group" ? "對唱 / 合唱" : "其他", s));
+  const order = { lang: ["國語", "台語", "粵語", "其他語言"], voice: ["男生歌", "女生歌", "對唱 / 合唱", "其他"] }[how];
+  const ents = [...g.entries()];
+  if (order) ents.sort((x, y) => order.indexOf(x[0]) - order.indexOf(y[0]));
+  else if (how === "era") ents.sort((x, y) => (y[0] === "年代未知" ? -1 : x[0] === "年代未知" ? 1 : y[0].localeCompare(x[0])));
+  else ents.sort((x, y) => y[1].length - x[1].length || x[0].localeCompare(y[0]));
+  return ents;
+}
 async function renderMine() {
   if (!me) return openWho();
   const elder = document.body.classList.contains("elder");
   V.innerHTML = `<div class="mecard"><div class="big">${esc(me.emoji)}</div><div><b>${esc(me.name)}</b><span class="muted" style="font-size:14px">點的歌、最愛、分數都記在這裡</span></div>
       <div class="acts"><button class="ib" id="swMe">換人</button></div></div>
     <div class="seg"><button data-mt="fav" class="${mineTab === "fav" ? "on" : ""}">我的最愛</button><button data-mt="sung" class="${mineTab === "sung" ? "on" : ""}">唱過的歌</button></div>
+    ${mineTab === "fav" ? `<div class="chips">${FAV_VIEWS.map(([k, n]) => `<button class="chip ${k === favView ? "on" : ""}" data-fv="${k}">${n}</button>`).join("")}</div>` : ""}
     <div id="mb"><div class="empty">載入中…</div></div>
     <div class="sub hd">📺 裝到電視</div>
     <div class="sub" style="font-size:15px;line-height:1.8;color:var(--fg)">
@@ -406,15 +424,51 @@ async function renderMine() {
       4. 開「家庭 KTV」，電視出現 QR Code，用這支手機掃一下就配對好了</div>
     <button class="ytbtn" id="elderBtn" style="color:var(--fg)">👓 長輩模式（字更大、按鈕更少）：${elder ? "開" : "關"}</button>`;
   $$("[data-mt]", V).forEach((b) => (b.onclick = () => { mineTab = b.dataset.mt; renderMine(); }));
+  $$("[data-fv]", V).forEach((b) => (b.onclick = () => { favView = b.dataset.fv; store("ktv_favview", favView); renderMine(); }));
   $("#swMe").onclick = openWho;
   $("#elderBtn").onclick = () => { setElder(!document.body.classList.contains("elder")); renderMine(); };
-  const tab = mineTab;
-  const songs = tab === "fav" ? await favoritesOf(me.id) : await sungSongs(me.id, 80);
-  if (view !== "mine" || tab !== mineTab || !$("#mb")) return;
-  $("#mb").innerHTML = songs.length
-    ? `<div class="list">${songs.map((s) => (tab === "fav" ? row(s) : row(s, { info: `唱過 ${s.times} 次${s.best ? " · 最高 " + s.best : ""}${dl.get(s.id) === "done" ? " · 已下載" : ""}` }))).join("")}</div>`
-    : `<div class="empty">${tab === "fav" ? "還沒有最愛。按歌曲右邊的 ⋮ →「加入最愛」。" : "還沒有唱過的歌，唱完會自動記錄。"}</div>`;
+  const tab = mineTab, fv = favView;
+  const stale = () => view !== "mine" || tab !== mineTab || fv !== favView || !$("#mb");
+  if (tab === "sung") {
+    const songs = await sungSongs(me.id, 80);
+    if (stale()) return;
+    $("#mb").innerHTML = songs.length
+      ? `<div class="list">${songs.map((s) => row(s, { info: `唱過 ${s.times} 次${s.best ? " · 最高 " + s.best : ""}${dl.get(s.id) === "done" ? " · 已下載" : ""}` })).join("")}</div>`
+      : `<div class="empty">還沒有唱過的歌，唱完會自動記錄。</div>`;
+    bindRows($("#mb"));
+    return;
+  }
+  const [favs, sung] = await Promise.all([favoritesOf(me.id), sungSongs(me.id, 500)]);
+  if (stale()) return;
+  if (!favs.length) { $("#mb").innerHTML = `<div class="empty">還沒有最愛。<br>唱歌畫面按歌名旁的 ♡，或歌曲右邊的 ⋮ →「加入最愛」。<br>唱完一首時也會問你要不要收藏。</div>`; return; }
+  const st = new Map(sung.map((x) => [x.id, x]));
+  const songs = favs.map((s) => ({ ...s, times: st.get(s.id)?.times || 0, best: st.get(s.id)?.best }));
+  const info = (s) => (s.times ? `唱過 ${s.times} 次${s.best ? " · 最高 " + s.best : ""}` : "還沒唱過");
+  const list = (arr) => `<div class="list">${arr.map((s) => row(s, { info: info(s) })).join("")}</div>`;
+  let html = "";
+  if (fv === "recent") html = list(songs);
+  else if (fv === "most") { const a = songs.filter((s) => s.times).sort((x, y) => y.times - x.times || (y.best || 0) - (x.best || 0)); html = a.length ? list(a) : `<div class="empty">最愛的歌還沒唱過，先唱幾首吧</div>`; }
+  else if (fv === "never") { const a = songs.filter((s) => !s.times); html = a.length ? `<div class="sub">收藏了但還沒唱過的歌，今天挑一首吧</div>` + list(a) : `<div class="empty">最愛的歌你全部都唱過了 👏</div>`; }
+  else html = groupFav(songs, fv).map(([k, arr]) => `<div class="sub hd">${esc(k)} <span class="muted" style="font-size:14px;font-weight:500">${arr.length} 首</span></div>${list(arr)}`).join("");
+  $("#mb").innerHTML = `<div class="favbar"><span>共 ${songs.length} 首最愛</span><button class="ib" id="favRand">🎲 隨機點 3 首</button></div>` + html;
   bindRows($("#mb"));
+  $("#favRand").onclick = async () => {
+    const pool = songs.filter((s) => s.yt_status !== "none").sort(() => Math.random() - 0.5).slice(0, 3);
+    let n = 0; for (const s of pool) { try { if (await enqueue(s.id, me.id)) n++; } catch { /* */ } }
+    toast(n ? `從最愛點了 ${n} 首 🎲` : "這些歌已經在排隊了"); refreshNow();
+  };
+}
+
+// ---- 收藏 right after singing ----
+let likeT = null;
+function askLike(song) {
+  if (!song || !me || favIds.has(song.id)) return;
+  const el = $("#likeBar");
+  el.innerHTML = `<span>剛唱完<b>「${esc(song.title)}」</b>喜歡嗎？</span><button class="likeyes">❤ 加入最愛</button><button class="likeno" aria-label="關閉">✕</button>`;
+  el.hidden = false;
+  clearTimeout(likeT); likeT = setTimeout(() => (el.hidden = true), 15000);
+  $(".likeyes", el).onclick = async () => { el.hidden = true; if (!favIds.has(song.id)) await toggleFav(song.id); refreshNow(); };
+  $(".likeno", el).onclick = () => (el.hidden = true);
 }
 
 // ================= now playing + controls =================
@@ -430,9 +484,10 @@ async function refreshNow() {
   const p = q.playing, plOpen = document.body.classList.contains("pl-open");
   const who = p?.member ? esc(p.member.emoji + " " + p.member.name) + " 正在唱" : "正在唱";
   $("#now").innerHTML = p
-    ? `<div class="lab">${who}${nowState?.paused ? " · 暫停中" : ""}</div><div class="t">${esc(p.song.title)}</div><div class="a">${esc(p.song.artist || "")}</div>`
+    ? `<div class="lab">${who}${nowState?.paused ? " · 暫停中" : ""}</div><div class="t">${esc(p.song.title)}</div><div class="a">${esc(p.song.artist || "")}</div><button id="nowFav" class="${favIds.has(p.song.id) ? "on" : ""}">${favIds.has(p.song.id) ? "❤ 已收藏" : "♡ 收藏"}</button>`
     : `<div class="now-empty">還沒有歌在播。按「繼續點歌」選一首，或按下面的 ⌄ 回去點歌 🎤</div>`;
   document.body.classList.toggle("has-song", !!p);
+  if (p) $("#nowFav").onclick = async () => { await toggleFav(p.song.id); refreshNow(); };
   $("#singBtn").classList.toggle("live", !!p);
   // mini player bar
   $("#mini").hidden = !p || plOpen;
@@ -517,7 +572,12 @@ $$("#pl [data-c], #mini [data-c], #fsbar [data-c]").forEach((b) => (b.onclick = 
 }));
 on("queue", refreshNow);
 on("state", (s) => { if (mode === "local") return; nowState = s; scorer.onState(s); refreshNow(); });
-on("ended", (p) => { if (mode !== "local") scorer.onEnded(p); });
+on("ended", (p) => {
+  if (mode === "local") return;
+  scorer.onEnded(p);
+  const pl = lastQueue?.playing;
+  askLike(pl && pl.id === p.qid ? pl.song : p.song_id ? { id: p.song_id, title: p.title || "" } : null);
+});
 on("ctl", (p) => { if (mode === "local") P.cmd(p.cmd); });
 on("hello", () => { if (mode === "local") P.sync(); });
 
@@ -707,6 +767,7 @@ const P = (() => {
     if (ending || !current) return;
     ending = true;
     const item = current, score = scorer.take();
+    askLike(item.song);
     await sb.from("ktv_history").insert({ member_id: item.member_id, song_id: item.song.id, score });
     msg(score != null ? `<b>${score}</b><span>${praise(score)}</span>` : `<span>👏 唱得好！</span><small>想要分數，先按「評分」再唱</small>`, "score");
     await new Promise((r) => setTimeout(r, 4000));
