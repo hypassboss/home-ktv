@@ -1,7 +1,8 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, searchSongs, members, favoritesOf, sungSongs,
-  queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf, findGuide, forgetGuide, artistsList, songsByArtist, micOffer, SONG_COLS,
-} from "./shared.js?v=1794702229";
+  queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf, findGuide, forgetGuide, artistsList, songsByArtist, SONG_COLS,
+} from "./shared.js?v=1794702799";
+import { playApplause } from "./applause.js?v=1794702799";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -550,20 +551,8 @@ $("#plClose").onclick = () => closePlayer();
 $("#plBrowse").onclick = () => closePlayer();
 $("#mini").onclick = (e) => { if (!e.target.closest("[data-c]")) openPlayer(); };
 let actx = null;
-function clap() {
-  try {
-    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-    actx.resume();
-    const dur = 2.6, sr = actx.sampleRate, buf = actx.createBuffer(1, sr * dur, sr), d = buf.getChannelData(0);
-    for (let k = 0; k < 90; k++) {
-      const t0 = Math.floor(Math.random() * (dur - 0.08) * sr), len = Math.floor(sr * (0.01 + Math.random() * 0.02)), amp = 0.25 + Math.random() * 0.35;
-      for (let i = 0; i < len; i++) d[t0 + i] += (Math.random() * 2 - 1) * amp * Math.exp(-i / (len / 4));
-    }
-    for (let i = 0; i < d.length; i++) d[i] *= Math.min(1, (d.length - i) / (sr * 0.8));
-    const src = actx.createBufferSource(), f = actx.createBiquadFilter();
-    f.type = "bandpass"; f.frequency.value = 1800; f.Q.value = 0.6;
-    src.buffer = buf; src.connect(f).connect(actx.destination); src.start();
-  } catch { /* */ }
+function clap(kind = "short") {
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); playApplause(actx, kind); } catch { /* */ }
 }
 $$("#pl [data-c], #mini [data-c], #fsbar [data-c]").forEach((b) => (b.onclick = (e) => {
   e.stopPropagation();
@@ -652,44 +641,6 @@ $("#micBtn").onclick = async () => {
   } catch { toast("沒有麥克風權限，請在瀏覽器允許麥克風"); }
 };
 
-// ================= phone as a wireless microphone (voice plays on the TV) =================
-const liveMic = (() => {
-  let pc = null, stream = null, id = null, lock = null, waitT = null;
-  const btn = $("#micLive");
-  function stop(quiet) {
-    clearTimeout(waitT);
-    if (id) emit("mic-stop", { id });
-    try { pc?.close(); } catch { /* */ }
-    stream?.getTracks().forEach((t) => t.stop());
-    try { lock?.release(); } catch { /* */ }
-    pc = null; stream = null; id = null; lock = null;
-    btn.setAttribute("aria-pressed", "false"); btn.textContent = "🎤 手機當麥克風";
-    if (!quiet) toast("麥克風已關閉");
-  }
-  async function start() {
-    if (mode === "local") { toast("影片在這支手機播的時候不能當麥克風。先切到「遙控電視」", 3500); return; }
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: false, channelCount: 1 } }); }
-    catch { toast("沒有麥克風權限，請在瀏覽器允許麥克風"); return; }
-    btn.setAttribute("aria-pressed", "true"); btn.textContent = "🎤 連線中…";
-    try {
-      id = Math.random().toString(36).slice(2, 10);
-      const o = await micOffer(stream);
-      pc = o.pc;
-      pc.addEventListener("connectionstatechange", () => {
-        if (!pc) return;
-        if (pc.connectionState === "connected") { clearTimeout(waitT); btn.textContent = "🎤 麥克風開啟中（按一下關閉）"; toast("麥克風已連上電視 🎤"); }
-        if (["failed", "disconnected"].includes(pc.connectionState)) { toast("麥克風連線中斷"); stop(true); }
-      });
-      emit("mic-offer", { id, sdp: o.sdp, name: me?.name || "" });
-      waitT = setTimeout(() => { if (pc && pc.connectionState !== "connected") { toast("電視沒有回應：請確認電視的 KTV 開著，而且和手機在同一個 Wi-Fi", 4500); stop(true); } }, 10000);
-      try { lock = await navigator.wakeLock?.request("screen"); } catch { /* */ }
-    } catch { toast("麥克風連線失敗"); stop(true); }
-  }
-  on("mic-answer", async (p) => { if (pc && p.id === id) { try { await pc.setRemoteDescription({ type: "answer", sdp: p.sdp }); } catch { /* */ } } });
-  btn.onclick = () => (pc || stream ? stop() : start());
-  return { stop };
-})();
-
 // ================= play on this phone =================
 // "local": this phone shows the KTV video.  "remote": this phone controls the TV.
 let mode = "remote";
@@ -768,6 +719,7 @@ const P = (() => {
     ending = true;
     const item = current, score = scorer.take();
     askLike(item.song);
+    clap("end");
     await sb.from("ktv_history").insert({ member_id: item.member_id, song_id: item.song.id, score });
     msg(score != null ? `<b>${score}</b><span>${praise(score)}</span>` : `<span>👏 唱得好！</span><small>想要分數，先按「評分」再唱</small>`, "score");
     await new Promise((r) => setTimeout(r, 4000));
@@ -841,8 +793,7 @@ function setMode(m, save) {
   $$("#modeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.m === m));
   $("#pbox").hidden = m !== "local";
   $("#fsBtn").hidden = m !== "local";
-  $("#micLive").hidden = m === "local";
-  if (m === "local") { liveMic.stop(true); P.loadApi(); refreshNow(); } else { P.stop(); refreshNow(); }
+  if (m === "local") { P.loadApi(); refreshNow(); } else { P.stop(); refreshNow(); }
 }
 $$("#modeSeg button").forEach((b) => (b.onclick = () => setMode(b.dataset.m, true)));
 // First visit: if a TV answers, be its remote; otherwise play on this phone.

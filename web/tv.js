@@ -1,7 +1,8 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, favoritesOf, sungSongs, queueNow, enqueue,
-  badges, esc, bestVideo, kindOf, toast, store, micAnswer, findGuide, forgetGuide, ytThumb, songsByIds, artistsList, songsByArtist,
-} from "./shared.js?v=1794702229";
+  badges, esc, bestVideo, kindOf, toast, store, findGuide, forgetGuide, ytThumb, songsByIds, artistsList, songsByArtist,
+} from "./shared.js?v=1794702799";
+import { playApplause } from "./applause.js?v=1794702799";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -409,7 +410,7 @@ async function songEnded() {
   const best = scoreWait.scores.sort((a, b) => b.score - a.score)[0];
   scoreWait = null;
   const who = item.member ? item.member.emoji + " " + item.member.name : "";
-  applause();
+  const clapName = applause("end");
   if (best) {
     if (hid) await sb.from("ktv_history").update({ score: best.score }).eq("id", hid);
     el.innerHTML = `<div class="s-who">${esc(who)}　${esc(item.song.title)}</div><div class="s-num">${best.score}</div><div class="s-msg">${praise(best.score)}</div><div class="s-sub">喜歡這首？手機上按 ❤ 加入最愛</div>`;
@@ -417,7 +418,8 @@ async function songEnded() {
   } else {
     el.innerHTML = `<div class="s-who">${esc(who)}　${esc(item.song.title)}</div><div class="s-msg" style="font-size:5vw">👏 唱得好！</div><div class="s-sub">想要分數？手機點歌頁打開「評分麥克風」</div><div class="s-sub">喜歡這首？手機上按 ❤ 加入最愛</div>`;
   }
-  await new Promise((r) => setTimeout(r, 4500));
+  if (clapName) el.insertAdjacentHTML("beforeend", `<div class="s-sub" style="opacity:.45;font-size:.9vw">掌聲：${esc(clapName)}版</div>`);
+  await new Promise((r) => setTimeout(r, 5500));
   el.hidden = true;
   await finishCurrent("done");
 }
@@ -429,20 +431,8 @@ function praise(s) {
   return "勇氣可嘉！";
 }
 let actx = null;
-function applause() {
-  try {
-    actx ||= new (window.AudioContext || window.webkitAudioContext)();
-    const dur = 2.6, sr = actx.sampleRate, buf = actx.createBuffer(1, sr * dur, sr), d = buf.getChannelData(0);
-    for (let k = 0; k < 90; k++) { // many short noise bursts = crowd clapping
-      const t0 = Math.floor(Math.random() * (dur - 0.08) * sr), len = Math.floor(sr * (0.01 + Math.random() * 0.02));
-      const amp = 0.25 + Math.random() * 0.35;
-      for (let i = 0; i < len; i++) d[t0 + i] += (Math.random() * 2 - 1) * amp * Math.exp(-i / (len / 4));
-    }
-    for (let i = 0; i < d.length; i++) d[i] *= Math.min(1, (d.length - i) / (sr * 0.8));
-    const src = actx.createBufferSource(), f = actx.createBiquadFilter();
-    f.type = "bandpass"; f.frequency.value = 1800; f.Q.value = 0.6;
-    src.buffer = buf; src.connect(f).connect(actx.destination); src.start();
-  } catch { /* */ }
+function applause(kind = "short") {
+  try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); return playApplause(actx, kind); } catch { return ""; }
 }
 
 // ================= control bar + phone commands =================
@@ -474,37 +464,6 @@ $("#miniNow").onclick = () => { if (current) show("playing"); };
 on("queue", () => refreshQueue());
 on("hello", () => broadcastState());
 
-// ---- phones used as wireless microphones ----
-const micPcs = new Map(), micNodes = new Map();
-function closeMic(id) {
-  const n = micNodes.get(id);
-  if (n) { try { n.src.disconnect(); n.dry.disconnect(); n.wet.disconnect(); n.delay.disconnect(); n.fb.disconnect(); n.el.srcObject = null; } catch { /* */ } micNodes.delete(id); }
-  const pc = micPcs.get(id);
-  if (pc) { try { pc.close(); } catch { /* */ } micPcs.delete(id); }
-}
-function playMic(id, stream) {
-  try {
-    actx ||= new (window.AudioContext || window.webkitAudioContext)({ latencyHint: "interactive" });
-    actx.resume();
-    const el = new Audio(); el.muted = true; el.srcObject = stream; el.play().catch(() => {}); // keeps the remote stream flowing in Chromium
-    const src = actx.createMediaStreamSource(stream), dry = actx.createGain(), delay = actx.createDelay(1), fb = actx.createGain(), wet = actx.createGain();
-    dry.gain.value = 1; delay.delayTime.value = 0.14; fb.gain.value = 0.3; wet.gain.value = 0.32;
-    src.connect(dry).connect(actx.destination);
-    src.connect(delay); delay.connect(fb).connect(delay); delay.connect(wet).connect(actx.destination);
-    micNodes.set(id, { el, src, dry, delay, fb, wet });
-  } catch { toast("麥克風聲音播放失敗"); }
-}
-on("mic-offer", async (p) => {
-  try {
-    closeMic(p.id);
-    const a = await micAnswer(p.sdp, (stream) => playMic(p.id, stream));
-    micPcs.set(p.id, a.pc);
-    a.pc.addEventListener("connectionstatechange", () => { if (["failed", "closed", "disconnected"].includes(a.pc.connectionState)) closeMic(p.id); });
-    emit("mic-answer", { id: p.id, sdp: a.sdp });
-    toast(`🎤 ${p.name || "手機"} 的麥克風已連線`);
-  } catch { toast("麥克風連線失敗"); }
-});
-on("mic-stop", (p) => closeMic(p.id));
 
 // ================= boot =================
 // First run on a new TV: show a pairing QR; a phone that is already set up confirms it.
