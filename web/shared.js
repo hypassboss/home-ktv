@@ -170,14 +170,26 @@ export function esc(t) {
 // "b" = backing track (no lead vocal), "g" = guide vocal (original singer: 導唱/原唱 KTV, MV, lyric video)
 export function kindOf(c) {
   const t = c.t || "";
-  if (/導唱|导唱|KTV\s*原唱|原唱版|原聲版|原声版/i.test(t)) return "g";
+  // 導唱 versions, and "左伴右唱" videos (vocals in one channel — on a TV both channels play, so you hear the singer)
+  if (/導唱|导唱|KTV\s*原唱|原唱版|原聲版|原声版|左伴右唱|右伴左唱|左右聲道|左右声道|原唱跟唱/i.test(t)) return "g";
   if (/伴奏|伴唱|karaoke|卡拉|去人聲|去人声|消音|instrumental|純音樂|纯音乐|無人聲|无人声|no ?vocal|off ?vocal/i.test(t)) return "b";
   if (/原唱/.test(t)) return "g";
   return c.ktv ? "b" : "g";
 }
+// A version people keep skipping in the first seconds (and rarely sing to the end) drops to the back.
+const doubtful = (x) => (x.weak || 0) - 2 * (x.good || 0) >= 2;
 export function bestVideo(song) {
-  const c = (song.yt || []).filter((x) => !x.bad);
-  return c.find((x) => x.ktv && kindOf(x) === "b") || c.find((x) => kindOf(x) === "b") || c.find((x) => x.ktv) || c[0] || null;
+  const all = (song.yt || []).filter((x) => !x.bad);
+  const c = all.filter((x) => !doubtful(x)).concat(all.filter(doubtful));
+  const proven = c.find((x) => (x.good || 0) >= 2 && !doubtful(x) && kindOf(x) === "b");
+  return proven || c.find((x) => x.ktv && kindOf(x) === "b") || c.find((x) => kindOf(x) === "b") || c.find((x) => x.ktv) || c[0] || null;
+}
+// Close a queue row and remember how it went, so the app learns which versions are good.
+export async function closeQueue(item, status, video, playedSec) {
+  const played = Math.max(0, Math.round(playedSec || 0));
+  await sb.from("ktv_queue").update({ status, played_sec: played, end_reason: status, video_id: video?.id || null }).eq("id", item.id);
+  const kind = status === "done" ? "full" : status === "skipped" && played < 30 && video ? "early" : null;
+  if (kind && video) sb.rpc("ktv_feedback", { p_song: item.song.id, p_video: video.id, p_kind: kind }).then(() => {}, () => {});
 }
 // 導唱: find an original-vocal video that lines up with the backing video now playing.
 // Best = same uploader + same length (KTV channels publish 伴唱/導唱 pairs cut from one master → same timeline).

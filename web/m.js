@@ -1,8 +1,8 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, searchSongs, members, favoritesOf, sungSongs,
-  queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf, findGuide, forgetGuide, artistsList, songsByArtist, SONG_COLS,
-} from "./shared.js?v=1795485971";
-import { playApplause } from "./applause.js?v=1795485971";
+  queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf, findGuide, forgetGuide, artistsList, songsByArtist, SONG_COLS, closeQueue,
+} from "./shared.js?v=1795487718";
+import { playApplause } from "./applause.js?v=1795487718";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -50,9 +50,9 @@ async function loadMine() {
 // ================= song rows =================
 // One row = cover · title/singer · red K歌 button · ⋮ (插播 / 最愛 / 同歌手 / 下載)
 function cover(s) {
-  const v = bestVideo(s);
-  return v ? `<img class="cover" loading="lazy" alt="" onerror="this.style.visibility='hidden'" src="https://i.ytimg.com/vi/${v.id}/mqdefault.jpg">`
-    : `<div class="cover ph">${esc((s.title || "?").slice(0, 1))}</div>`;
+  const v = bestVideo(s), ch = esc((s.title || "?").slice(0, 1));
+  // the first letter sits underneath, so a missing thumbnail never leaves a blank hole
+  return `<div class="cover ph">${ch}${v ? `<img loading="lazy" alt="" onerror="this.remove()" src="https://i.ytimg.com/vi/${v.id}/mqdefault.jpg">` : ""}</div>`;
 }
 function row(s, opts = {}) {
   const left = opts.rank != null ? `<span class="rk ${opts.rank <= 3 ? "top" : ""}">${opts.rank}</span>` : "";
@@ -64,7 +64,7 @@ function row(s, opts = {}) {
     <div class="meta"><div class="t">${esc(s.title)}</div>
       <div class="a">${esc(s.artist || "")}</div>
       <div class="tags">${fav}${badges(s)}${info}</div></div>
-    <button class="kbtn" data-add="${s.id}">K歌</button>
+    ${s.yt_status === "none" ? `<button class="kbtn find" data-find="${s.id}">找版本</button>` : `<button class="kbtn" data-add="${s.id}">K歌</button>`}
     <button class="more" data-more="${s.id}" aria-label="更多">⋮</button></div>`;
 }
 let songCache = new Map();
@@ -91,6 +91,12 @@ function bindRows(root) {
     catch { toast("插播失敗，請再試一次"); }
     b.disabled = false;
   }));
+  // no KTV video found yet: go look on YouTube instead of queueing a song that can't play
+  $$("[data-find]", root).forEach((b) => (b.onclick = () => {
+    const x = songCache.get(b.dataset.find); if (!x) return;
+    const q = `${x.title} ${(x.artist || "").split(/\s*[、,，&\/／]\s*/)[0]}`.trim();
+    $("#q").value = q; window.scrollTo(0, 0); goSearch(q, true);
+  }));
   $$("[data-add]", root).forEach((b) => (b.onclick = async () => {
     b.disabled = true;
     try { const ok = await addSong(b.dataset.add, false); if (ok) { b.textContent = "已點"; setTimeout(() => (b.textContent = "K歌"), 1800); } }
@@ -102,6 +108,7 @@ function bindRows(root) {
 async function addSong(id, front) {
   const wasIdle = !lastQueue?.playing && !lastQueue?.queued?.length;
   const ok = await enqueue(id, me?.id, front);
+  if (ok && mode === "remote" && Date.now() - tvSeen > 30000) checkTv();
   toast(!ok ? "這首已經在排隊了" : front ? "已插播，下一首就唱 ⤒" : "已點歌 🎵");
   await refreshNow();
   if (ok && wasIdle && mode === "local") openPlayer();
@@ -248,12 +255,13 @@ async function doSearch(q, keepVids) {
   bindRows(box);
   $("#ytb").onclick = () => ytSearch(q);
   if (lastVids) showVids(q, lastVids);
+  else if (!songs.length && [...q].length >= 2) ytSearch(q); // nothing in the library: look on YouTube right away
 }
 async function ytSearch(q, isArtist) {
   const yr = $("#yr");
   if (!yr) return;
   yr.innerHTML = `<div class="empty">搜尋 YouTube 中…</div>`;
-  try { const r = await api("yt_search", { q }); lastVids = r.videos; showVids(q, r.videos, isArtist); }
+  try { const r = await api("yt_search", { q }); if (!isArtist && q !== lastQ) return; lastVids = r.videos; showVids(q, r.videos, isArtist); }
   catch { yr.innerHTML = `<div class="empty">YouTube 搜尋失敗，稍後再試</div>`; }
 }
 function showVids(q, vids, isArtist) {
@@ -560,7 +568,22 @@ $$("#pl [data-c], #mini [data-c], #fsbar [data-c]").forEach((b) => (b.onclick = 
   if (mode === "local") P.cmd(c); else { emit("ctl", { cmd: c }); toast(CTL_NAME[c]); }
 }));
 on("queue", refreshNow);
-on("state", (s) => { if (mode === "local") return; nowState = s; scorer.onState(s); refreshNow(); });
+let tvSeen = 0;
+on("state", (s) => { tvSeen = Date.now(); $("#tvWarn")?.remove(); if (mode === "local") return; nowState = s; scorer.onState(s); refreshNow(); });
+// 電視唱 but the TV isn't on: say so instead of leaving songs waiting forever
+async function checkTv() {
+  if (mode !== "remote") return;
+  const asked = Date.now();
+  emit("hello");
+  await new Promise((r) => setTimeout(r, 4000));
+  if (mode !== "remote" || tvSeen >= asked || $("#tvWarn")) return;
+  const el = document.createElement("div");
+  el.id = "tvWarn";
+  el.innerHTML = `<span>📺 電視好像沒開<small>打開電視上的「家庭 KTV」，點的歌就會開始播</small></span><button>改用手機唱</button><b aria-label="關閉">✕</b>`;
+  document.body.appendChild(el);
+  $("button", el).onclick = () => { el.remove(); setMode("local", true); openPlayer(); };
+  $("b", el).onclick = () => el.remove();
+}
 on("ended", (p) => {
   if (mode === "local") return;
   scorer.onEnded(p);
@@ -708,10 +731,11 @@ const P = (() => {
   }
   async function finish(status) {
     if (!current) return;
-    const item = current;
+    const item = current, video = curVideo;
+    let played = 0; try { played = yt?.getCurrentTime ? yt.getCurrentTime() : 0; } catch { /* */ }
     advancing = true; current = null; curVideo = null; clearTimeout(nudgeT);
     try { yt?.stopVideo(); } catch { /* */ }
-    try { await sb.from("ktv_queue").update({ status }).eq("id", item.id); } finally { advancing = false; }
+    try { await closeQueue(item, status, guideOn ? backing || video : video, played); } finally { advancing = false; }
     msg(""); emit("queue"); sync(); refreshNow();
   }
   async function ended() {
@@ -795,7 +819,7 @@ function setMode(m, save) {
   $("#fsBtn").hidden = m !== "local";
   if (m === "local") { P.loadApi(); refreshNow(); } else { P.stop(); refreshNow(); }
 }
-$$("#modeSeg button").forEach((b) => (b.onclick = () => setMode(b.dataset.m, true)));
+$$("#modeSeg button").forEach((b) => (b.onclick = () => { setMode(b.dataset.m, true); if (b.dataset.m === "remote") checkTv(); else $("#tvWarn")?.remove(); }));
 // First visit: if a TV answers, be its remote; otherwise play on this phone.
 async function pickMode() {
   const saved = store("ktv_mode");
@@ -837,7 +861,7 @@ async function boot() {
   if (!KEY) { needKey(pair ? "none" : "none"); return; }
   {
     const { count, error } = await sb.from("ktv_songs").select("id", { count: "exact", head: true });
-    if (!error && !count) { needKey("bad"); return; }
+    if (!error && count === 0) { needKey("bad"); return; } // only a definite 0 — never lock people out on a hiccup
   }
   if (pair) {
     history.replaceState(null, "", location.pathname);

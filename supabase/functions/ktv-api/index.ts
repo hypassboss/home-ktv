@@ -29,6 +29,8 @@ function cleanTitle(t: string) {
   return t
     .replace(/\s+-\s+[^-]*(?:《|》|主題曲|主题曲|插曲|片尾曲|片頭曲|片头曲|電視劇|电视剧|影集|電影|电影)[^-]*$/, "")
     .replace(/[（(【\[][^）)】\]]*(?:《|》|插曲|主題曲|主题曲|片尾|片頭|片头|Live|live|LIVE|feat|Feat|cover|Cover|版|Ver|ver|Remix|remix|伴奏|劇|剧)[^）)】\]]*[）)】\]]/g, "")
+    .replace(/\s*[（(][^）)]*(?:第\s*\d+\s*[期季集]|EP\s*\d+)[^）)]*[）)]/gi, "") // (聽，誰在唱歌2 第4期)
+    .replace(/\s*[-–—]\s*(?:live|現場版|现场版)\s*$/i, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -102,7 +104,13 @@ function titleMatch(vt: string, ch: string, title: string, artist: string) {
   if (!nt) return false;
   const a = norm(s2t(mainArtist(artist)));
   const hasArtist = !a || nv.includes(a) || norm(s2t(ch)).includes(a);
-  if (nv.includes(nt)) return [...nt].length > 2 || hasArtist; // very short titles also need the artist
+  if (nv.includes(nt)) {
+    if ([...nt].length > 2) return true;
+    // very short titles ("她", "愛") need the artist — or, with no artist known, the title standing alone ("- 她 :" / "《她》")
+    if (a) return hasArtist;
+    const raw = norm(s2t(title)).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(^|[\\s\\-–—|｜《「【\\[(（:：])${raw}($|[\\s\\-–—|｜》」】\\])）:：])`).test(s2t(vt));
+  }
   const runs = (s2t(title).match(/\p{Script=Han}{2,}/gu) ?? []).map(norm);
   return runs.length > 1 && hasArtist && runs.some((r) => nv.includes(r)); // "中文名English - 副標" style titles
 }
@@ -119,6 +127,8 @@ function scoreVid(v: Vid, title: string, artist: string) {
   if (/[ăđơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i.test(v.t)) s -= 4; // Vietnamese karaoke versions
   if (v.sec && v.sec > 9 * 60) s -= 5;
   if (v.sec && v.sec < 100) s -= 6;
+  if (/左伴右唱|右伴左唱|左右聲道|左右声道|原唱跟唱/.test(v.t)) s -= 2; // vocals still in one channel
+  if (/fan-?made|\bAI\b/i.test(v.t)) s -= 3;
   return { s, ktv: isKtv };
 }
 async function matchSong(title: string, artist: string) {

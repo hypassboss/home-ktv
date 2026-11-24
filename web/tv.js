@@ -1,8 +1,8 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, favoritesOf, sungSongs, queueNow, enqueue,
-  badges, esc, bestVideo, kindOf, toast, store, findGuide, forgetGuide, ytThumb, songsByIds, artistsList, songsByArtist,
-} from "./shared.js?v=1795485971";
-import { playApplause } from "./applause.js?v=1795485971";
+  badges, esc, bestVideo, kindOf, toast, store, findGuide, forgetGuide, ytThumb, songsByIds, closeQueue, artistsList, songsByArtist,
+} from "./shared.js?v=1795487718";
+import { playApplause } from "./applause.js?v=1795487718";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -110,6 +110,7 @@ function card(s, extra = "") {
 }
 function bindCards(root) {
   $$("[data-song]", root).forEach((b) => (b.onclick = async () => {
+    if (b.classList.contains("na")) { toast("這首還找不到 KTV 影片：用手機搜尋歌名，就能從 YouTube 加進來", 3500); return; }
     try { const ok = await enqueue(b.dataset.song, null); toast(!ok ? "這首已經在排隊了" : current ? "已加入排隊 🎵" : "準備播放…"); refreshQueue(); }
     catch { toast("點歌失敗，請再試一次"); }
   }));
@@ -380,11 +381,12 @@ async function altVersion() {
 
 async function finishCurrent(status) {
   if (!current) return;
-  const item = current;
+  const item = current, video = guideOn && backing ? backing : curVideo;
+  let played = 0; try { played = yt?.getCurrentTime ? yt.getCurrentTime() : 0; } catch { /* */ }
   advancing = true; // block the 8-second poll from restarting this song while its status is being saved
   current = null; curVideo = null;
   try { yt?.stopVideo(); } catch { /* */ }
-  try { await sb.from("ktv_queue").update({ status }).eq("id", item.id); } finally { advancing = false; }
+  try { await closeQueue(item, status, video, played); } finally { advancing = false; }
   emit("queue");
   updateNowBar();
   if (view === "ctl" || view === "playing") show("home");
