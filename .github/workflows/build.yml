@@ -30,9 +30,10 @@ jobs:
           path: dl
       - run: cp dl/HomeKTV.apk web/tv.apk   # short link for the TV's Downloader app
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: web
+      - run: sleep 20   # give GitHub time to register the uploaded artifact
       - id: deploy
         uses: actions/deploy-pages@v4
 
