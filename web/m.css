@@ -209,3 +209,13 @@ body.pl-open #likeBar{bottom:calc(16px + env(safe-area-inset-bottom,0px))}
 .likeno{flex:none;border:0;background:transparent;font-size:18px;color:var(--muted);width:32px}
 @keyframes likein{from{transform:translateY(20px);opacity:0}}
 .favbar{display:flex;align-items:center;justify-content:space-between;margin:2px 0 6px;font-size:14px;color:var(--muted)}
+
+/* key setup */
+.keybox{padding:24px 6px;line-height:1.6}
+.keybox h2{margin:6px 0 4px;font-size:22px}
+.keybox .kb-ico{font-size:44px}
+.keybox .warn{background:#fff4e5;border-radius:12px;padding:10px 12px;color:#8a4b00}
+.keybox .sbtn{display:block;width:100%;margin:6px 0 14px}
+#kbForm{display:flex;gap:8px;margin:6px 0 10px}
+#kbForm input{flex:1;min-width:0;background:var(--panel);border:0;border-radius:12px;padding:13px;font-size:16px}
+#kbForm .sbtn{width:auto;margin:0;padding:0 18px}

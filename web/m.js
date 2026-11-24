@@ -1,8 +1,8 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, searchSongs, members, favoritesOf, sungSongs,
   queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf, findGuide, forgetGuide, artistsList, songsByArtist, SONG_COLS,
-} from "./shared.js?v=1794702799";
-import { playApplause } from "./applause.js?v=1794702799";
+} from "./shared.js?v=1795485971";
+import { playApplause } from "./applause.js?v=1795485971";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -808,13 +808,36 @@ async function pickMode() {
 }
 
 // ================= boot =================
+// This browser has no home key, or a wrong one (every list comes back empty): ask for the link once.
+function needKey(why) {
+  const inLine = /\bLine\//i.test(navigator.userAgent);
+  V.innerHTML = `<div class="keybox">
+    <div class="kb-ico">🔑</div>
+    <h2>${why === "bad" ? "這個瀏覽器的家庭金鑰不對" : "這個瀏覽器還沒設定"}</h2>
+    <p class="muted">所以歌單、歌星、最愛都看不到（資料都還在，不會不見）。</p>
+    ${inLine ? `<p class="warn">你現在是在 <b>LINE 裡面的瀏覽器</b>開的，它和 Chrome 是分開的，要另外設定一次。建議改用 Chrome 開：</p>
+      <button class="sbtn go wide" id="kbChrome">用 Chrome 開啟點歌</button>` : ""}
+    <p>把家庭 KTV 的完整連結（含 <b>?k=</b> 那段）或金鑰貼在這裡：</p>
+    <form id="kbForm"><input id="kbIn" placeholder="貼上連結或金鑰" autocomplete="off"><button class="sbtn go">確定</button></form>
+    <p class="muted" style="font-size:14px">或用這支手機掃電視上「手機掃碼點歌」的 QR Code。</p></div>`;
+  $("#kbForm").onsubmit = (e) => {
+    e.preventDefault();
+    const v = $("#kbIn").value.trim(), m = v.match(/[?&]k=([^&#\s]+)/), k = m ? decodeURIComponent(m[1]) : v;
+    if (!/^[A-Za-z0-9_-]{8,}$/.test(k)) { toast("看不出金鑰，請貼完整連結"); return; }
+    store("ktv_key", k); location.replace(location.pathname);
+  };
+  $("#kbChrome")?.addEventListener("click", () => {
+    const u = location.origin + location.pathname + "?openExternalBrowser=1" + (KEY && why !== "bad" ? "&k=" + encodeURIComponent(KEY) : "");
+    location.href = u;
+  });
+  $("#tabbar").hidden = true;
+}
 async function boot() {
   const pair = new URLSearchParams(location.search).get("pair");
-  if (!KEY) {
-    V.innerHTML = pair
-      ? `<div class="empty">這支手機還沒設定。<br>請先用家庭 KTV 的完整連結（含金鑰）打開一次點歌頁，再回來掃電視上的配對 QR Code。</div>`
-      : `<div class="empty">請用手機掃描電視上的 QR Code 開啟點歌</div>`;
-    return;
+  if (!KEY) { needKey(pair ? "none" : "none"); return; }
+  {
+    const { count, error } = await sb.from("ktv_songs").select("id", { count: "exact", head: true });
+    if (!error && !count) { needKey("bad"); return; }
   }
   if (pair) {
     history.replaceState(null, "", location.pathname);
