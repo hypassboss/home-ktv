@@ -1,8 +1,8 @@
 import {
   KEY, sb, api, on, emit, chartList, chartSongs, searchSongs, members, favoritesOf, sungSongs,
   queueNow, enqueue, bumpToFront, removeQueued, badges, esc, toast, store, bestVideo, kindOf, findGuide, forgetGuide, artistsList, songsByArtist, SONG_COLS, closeQueue,
-} from "./shared.js?v=1795487718";
-import { playApplause } from "./applause.js?v=1795487718";
+} from "./shared.js?v=1795487874";
+import { playApplause } from "./applause.js?v=1795487874";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];

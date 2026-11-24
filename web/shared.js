@@ -78,7 +78,24 @@ export async function songsByIds(ids) {
 }
 export async function searchSongs(q) {
   const { data } = await sb.rpc("ktv_search", { p_q: q, p_limit: 40 });
-  return data || [];
+  return dedupe(data || []);
+}
+// Charts bring the same song in under slightly different names ("甲乙丙丁 (你我怎麼兩清)" / "甲乙丙丁Strangers - 你我怎麼兩清").
+// Show it once: the copy that can play and has the most versions.
+const plain = (t) => t.toLowerCase().replace(/[\s\p{P}\p{S}]/gu, "");
+const coreTitle = (t) => {
+  t = t || "";
+  const c = plain(t.replace(/[（(【\[].*?[）)】\]]/g, "").replace(/\s+[-–—].*$/, "").replace(/(\p{Script=Han})[a-z]+$/iu, "$1"));
+  return c || plain(t); // English-only titles keep their full name
+};
+export function dedupe(songs) {
+  const best = new Map(), order = [];
+  const score = (s) => (s.yt_status === "ok" ? 10 : 0) + (s.yt || []).filter((x) => !x.bad).length;
+  for (const s of songs) {
+    const k = coreTitle(s.title) + "|" + (s.artist || "").split(SPLIT)[0].replace(/\s+/g, "").toLowerCase();
+    if (!best.has(k)) { best.set(k, s); order.push(k); } else if (score(s) > score(best.get(k))) best.set(k, s);
+  }
+  return order.map((k) => best.get(k));
 }
 const SPLIT = /\s*[、,，&\/／]\s*/;
 export async function artistsList() {
